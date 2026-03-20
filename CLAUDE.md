@@ -2,6 +2,19 @@
 
 Multi OpenClaw instance manager — scaffold, run, and deploy AI agents with persistent memory.
 
+## MANDATORY: Documentation Sync Rule
+
+> **아키텍처, 파일 구조, 보안 구조, 컨테이너 토폴로지, 데이터 흐름을 변경하면 반드시 아래 문서를 함께 업데이트하라.**
+>
+> | 문서 | 역할 | 언제 업데이트 |
+> |------|------|-------------|
+> | `docs/ARCHITECTURE.md` | **아키텍처 소스 오브 트루스.** 다이어그램, 파일 구조, 토폴로지, 데이터 흐름 | 구조 변경 시 **가장 먼저** 업데이트 |
+> | `docs/SECURITY.md` | 보안 설계 근거, 위협 모델, 체크리스트 | 보안 관련 변경 시 |
+> | `README.md` | 외부 사용자용 가이드 | 커맨드/설치 방법/구조 변경 시 |
+> | `CLAUDE.md` (이 파일) | AI 에이전트 + 개발자 인스트럭션 | 컨벤션/규칙 변경 시 |
+>
+> **docs/ARCHITECTURE.md가 최신 아키텍처의 단일 출처(single source of truth)다.** 다른 문서의 아키텍처 설명은 이 문서를 따른다. 충돌 시 ARCHITECTURE.md가 우선.
+
 ## Project Overview
 
 - **Runtime:** Bun (zero npm dependencies, Bun built-ins only)
@@ -9,7 +22,9 @@ Multi OpenClaw instance manager — scaffold, run, and deploy AI agents with per
 - **Package:** `@permissionlabs/claw-farm`
 - **Repo:** github.com/PermissionLabs/claw-farm (public, MIT)
 
-## Architecture
+## Architecture (요약)
+
+> 전체 다이어그램은 `docs/ARCHITECTURE.md` 참조.
 
 ```
 claw-farm CLI
@@ -19,20 +34,9 @@ claw-farm CLI
   └── templates/       # docker-compose, openclaw.json5, SOUL.md, policy.yaml, api-proxy, nginx
 ```
 
-### 2-Layer Memory Architecture
-- **Layer 0 (raw/):** Immutable, append-only. Session logs + workspace snapshots. NEVER delete.
-- **Layer 1 (processed/):** Swappable processors. Can be wiped and rebuilt from Layer 0.
+**보안:** `OpenClaw ──(키 없음)──→ api-proxy ──(PII 리댁션 + 키 주입)──→ Gemini API ──→ (시크릿 스캔) ──→ 에이전트`
 
-### Security Architecture (API Proxy Pattern)
-```
-OpenClaw ──(internal net, no API key)──→ api-proxy ──(key injection + PII redaction)──→ Gemini API
-                                        ← (secret scanning) ←
-```
-- OpenClaw container has NO API keys and NO direct internet access
-- api-proxy sidecar: key injection, PII auto-redaction, response secret scanning, audit logging
-- PII detected: Korean RRN/phone, US SSN/phone, credit cards, emails → auto-masked as [REDACTED_TYPE]
-- Secrets detected: Google/OpenAI/Anthropic/GitHub/AWS/Stripe keys, JWTs, private keys → stripped from responses
-- All containers: read-only rootfs, cap_drop ALL, resource limits, tmpfs
+**메모리:** Layer 0 (raw/, 불변) → Layer 1 (processed/, 교체 가능)
 
 ## Commands
 
@@ -66,15 +70,21 @@ bun run src/index.ts     # Run CLI
 - Squash merge only, branch protection on main
 - Commit messages: English, concise, "why" not "what"
 
-## Security Reference
+## Key Documentation
 
-See `docs/SECURITY.md` for comprehensive OpenClaw security hardening guide based on 2026-03-20 research.
+| 문서 | 내용 |
+|------|------|
+| `docs/ARCHITECTURE.md` | 전체 아키텍처 다이어그램 (파일 구조, 컨테이너 토폴로지, 데이터 흐름, 메모리 구조, 온보딩) |
+| `docs/SECURITY.md` | OpenClaw 보안 하드닝 가이드 (2026-03-20 리서치 기반, 8개 소스) |
+| `README.md` | 사용자 가이드 (설치, 퀵스타트, 커맨드 레퍼런스) |
 
 ---
 
 ## For AI Agents: How to Use claw-farm in Other Projects
 
-If you're an AI agent working in a project that uses claw-farm (e.g., dog-agent, tamagochi), here's what you need to know:
+If you're an AI agent working in a project that uses claw-farm (e.g., dog-agent, tamagochi), here's what you need to know.
+
+**먼저 `docs/ARCHITECTURE.md`를 읽어서 전체 구조를 파악하라.**
 
 ### Check if this project is managed by claw-farm
 Look for `.claw-farm.json` in the project root. It contains:
@@ -119,3 +129,6 @@ bun run /path/to/claw-farm/src/index.ts init project-name --existing --processor
 bun run /path/to/claw-farm/src/index.ts up project-name
 bun run /path/to/claw-farm/src/index.ts down project-name
 ```
+
+### If you change the architecture
+**You MUST update `docs/ARCHITECTURE.md` first**, then sync other docs as needed. See the "Documentation Sync Rule" at the top of this file.
