@@ -5,6 +5,7 @@ Multi OpenClaw instance manager — scaffold, run, and deploy AI agents with per
 ## Features
 
 - **One-command scaffolding**: `claw-farm init my-agent` creates a full OpenClaw project with Docker Compose, config, and memory structure
+- **Security by default**: API proxy sidecar isolates keys from the agent, auto-redacts PII, scans LLM responses for secrets
 - **2-Layer Memory Architecture**: Raw data is immutable (never deleted), processing layer is swappable
 - **Multiple processors**: Builtin (MEMORY.md) or Mem0+Qdrant for semantic vector search
 - **Multi-instance management**: Run multiple OpenClaw agents with auto-assigned ports
@@ -17,22 +18,22 @@ Multi OpenClaw instance manager — scaffold, run, and deploy AI agents with per
 git clone https://github.com/PermissionLabs/claw-farm.git
 cd claw-farm && bun install
 
-# Add alias (optional)
-alias claw-farm='bun run /path/to/claw-farm/src/index.ts'
+# Add alias to your shell profile (~/.zshrc or ~/.bashrc)
+echo 'alias claw-farm="bun run ~/path/to/claw-farm/src/index.ts"' >> ~/.zshrc
+source ~/.zshrc
 ```
 
 > **npm publish is planned** — `bun install -g @permissionlabs/claw-farm` will work once published.
 
-## Quick Start
+## Quick Start — New Project
 
 ```bash
-# Scaffold a new agent
 mkdir my-agent && cd my-agent
-bun run /path/to/claw-farm/src/index.ts init my-agent
+claw-farm init my-agent
 
 # Configure API keys
 cp .env.example .env
-# Edit .env with your GEMINI_API_KEY
+vi .env  # Add your GEMINI_API_KEY
 
 # Start
 claw-farm up my-agent
@@ -41,18 +42,70 @@ claw-farm up my-agent
 open http://localhost:18789
 ```
 
+## Quick Start — Existing Project
+
+If you already have an OpenClaw setup (like dog-agent with docker-compose.yml):
+
+```bash
+cd ~/projects/dog-agent
+claw-farm init dog-agent --existing --processor mem0
+```
+
+This will:
+1. Register the project in the global registry (auto-assign port)
+2. Create `openclaw/raw/` directories (Layer 0 memory preservation)
+3. Generate `api-proxy/` sidecar (key isolation + PII filter)
+4. Generate `policy.yaml` (tool access restrictions)
+5. **NOT** overwrite your existing docker-compose.yml or openclaw config
+
+You can then either:
+- Use `claw-farm up` (uses the new `docker-compose.openclaw.yml`)
+- Keep your existing compose and just use claw-farm for registry/memory management
+
 ## Commands
 
 | Command | Description |
 |---------|-------------|
 | `claw-farm init <name>` | Scaffold OpenClaw project |
 | `claw-farm init <name> --processor mem0` | Scaffold with Mem0+Qdrant |
-| `claw-farm init <name> --existing` | Register existing project |
-| `claw-farm up [name\|--all]` | Start containers |
-| `claw-farm down [name\|--all]` | Stop containers |
+| `claw-farm init <name> --existing` | Register existing project + add security layer |
+| `claw-farm up [name\|--all]` | Start Docker Compose |
+| `claw-farm down [name\|--all]` | Stop Docker Compose |
 | `claw-farm list` | Show all projects + status |
 | `claw-farm memory:rebuild [name]` | Rebuild memory from raw data |
-| `claw-farm cloud:compose` | Generate cloud deployment compose |
+| `claw-farm cloud:compose [outfile]` | Generate cloud deployment compose |
+
+## Security Architecture
+
+```
+User ──→ OpenClaw Dashboard (localhost:18789)
+           │
+           │ Agent calls LLM
+           ▼
+        ┌─────────────────────────────────────────┐
+        │  api-proxy (internal network only)        │
+        │                                           │
+        │  Outbound: PII auto-redacted              │
+        │    "주민번호 880101-1234567"               │
+        │    → "[REDACTED_KR_RRN]"                  │
+        │                                           │
+        │  API key injected (agent never sees it)   │
+        │                                           │
+        │  ──→ Gemini API ──→ Response              │
+        │                                           │
+        │  Inbound: Secrets stripped                 │
+        │    "Found key: sk-ant-abc123..."          │
+        │    → "[REDACTED_ANTHROPIC_KEY]"           │
+        │                                           │
+        │  Audit log: logs/api-proxy-audit.jsonl    │
+        └─────────────────────────────────────────┘
+```
+
+**PII patterns detected:** Korean RRN/phone, US SSN/phone, credit cards, emails
+**Secret patterns detected:** Google/OpenAI/Anthropic/GitHub/AWS/Stripe keys, JWTs, private keys
+**PII mode:** `PII_MODE=redact` (default) | `block` | `warn`
+
+See [docs/SECURITY.md](docs/SECURITY.md) for the full security hardening guide.
 
 ## Memory Architecture
 
@@ -70,11 +123,17 @@ Layer 1: Processing (swappable, rebuildable)
 
 ```
 my-agent/
-  docker-compose.openclaw.yml   # Docker Compose config
+  docker-compose.openclaw.yml   # Docker Compose (hardened)
   .claw-farm.json                # Project settings
   .env.example                   # API key template
+  api-proxy/                     # Security sidecar
+    api_proxy.py                 #   Key injection + PII redaction + secret scanning
+    Dockerfile
+    requirements.txt
   openclaw/
-    config/openclaw.json5        # LLM config
+    config/
+      openclaw.json5             # LLM config (routes through proxy, no raw keys)
+      policy.yaml                # Tool access restrictions
     workspace/
       SOUL.md                    # Agent personality
       MEMORY.md                  # Agent memory
@@ -83,6 +142,7 @@ my-agent/
       sessions/                  # Session logs (.jsonl)
       workspace-snapshots/       # Periodic snapshots
     processed/                   # Layer 1: rebuildable
+  logs/                          # Audit logs
 ```
 
 ## Cloud Deployment (Coolify + Hetzner)

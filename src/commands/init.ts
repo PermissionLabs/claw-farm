@@ -144,10 +144,36 @@ async function registerExisting(
 
   const entry = await addProject(name, projectDir, processor);
 
-  // Ensure raw directories exist
+  // Ensure raw directories exist (Layer 0)
   await ensureRawDirs(projectDir);
+  await mkdir(join(projectDir, "openclaw", "processed"), { recursive: true });
+  await mkdir(join(projectDir, "logs"), { recursive: true });
+  console.log("✓ Created raw/ + processed/ + logs/ directories");
 
-  // Write project config if missing
+  // Add policy.yaml if missing
+  const policyPath = join(projectDir, "openclaw", "config", "policy.yaml");
+  try {
+    await Bun.file(policyPath).text();
+    console.log("✓ policy.yaml already exists — skipped");
+  } catch {
+    await Bun.write(policyPath, policyTemplate(name));
+    console.log("✓ Generated openclaw/config/policy.yaml");
+  }
+
+  // Add api-proxy if missing
+  const proxyDir = join(projectDir, "api-proxy");
+  try {
+    await Bun.file(join(proxyDir, "api_proxy.py")).text();
+    console.log("✓ api-proxy/ already exists — skipped");
+  } catch {
+    await mkdir(proxyDir, { recursive: true });
+    await Bun.write(join(proxyDir, "api_proxy.py"), apiProxyServerTemplate());
+    await Bun.write(join(proxyDir, "Dockerfile"), apiProxyDockerfileTemplate());
+    await Bun.write(join(proxyDir, "requirements.txt"), apiProxyRequirementsTemplate());
+    console.log("✓ Generated api-proxy/ (key isolation + PII filter)");
+  }
+
+  // Write project config
   await writeProjectConfig(projectDir, {
     name,
     processor,
@@ -156,6 +182,13 @@ async function registerExisting(
   });
 
   console.log(`✓ Registered in global registry (port: ${entry.port})`);
-  console.log(`✓ Raw collection directories ensured`);
-  console.log(`\n✅ Existing project "${name}" registered!\n`);
+
+  // Show migration guide
+  console.log(`\n✅ Existing project "${name}" registered!`);
+  console.log(`\n⚠️  Migration notes:`);
+  console.log(`  Your existing docker-compose.yml is untouched.`);
+  console.log(`  To use claw-farm's secure compose (api-proxy + hardening):`);
+  console.log(`    1. Review the generated api-proxy/ and policy.yaml`);
+  console.log(`    2. Run: claw-farm up ${name}  (uses docker-compose.openclaw.yml)`);
+  console.log(`    3. Or keep your existing compose and use claw-farm for registry only\n`);
 }

@@ -25,10 +25,13 @@ claw-farm CLI
 
 ### Security Architecture (API Proxy Pattern)
 ```
-OpenClaw ──(internal net, no API key)──→ api-proxy ──(key injection + PII filter)──→ Gemini API
+OpenClaw ──(internal net, no API key)──→ api-proxy ──(key injection + PII redaction)──→ Gemini API
+                                        ← (secret scanning) ←
 ```
 - OpenClaw container has NO API keys and NO direct internet access
-- api-proxy sidecar: key injection, PII scanning/redaction, content size limits, audit logging
+- api-proxy sidecar: key injection, PII auto-redaction, response secret scanning, audit logging
+- PII detected: Korean RRN/phone, US SSN/phone, credit cards, emails → auto-masked as [REDACTED_TYPE]
+- Secrets detected: Google/OpenAI/Anthropic/GitHub/AWS/Stripe keys, JWTs, private keys → stripped from responses
 - All containers: read-only rootfs, cap_drop ALL, resource limits, tmpfs
 
 ## Commands
@@ -36,7 +39,7 @@ OpenClaw ──(internal net, no API key)──→ api-proxy ──(key injectio
 ```bash
 bun run src/index.ts init <name>                  # Scaffold project
 bun run src/index.ts init <name> --processor mem0  # With Mem0+Qdrant
-bun run src/index.ts init <name> --existing        # Register existing project
+bun run src/index.ts init <name> --existing        # Register existing + add security layer
 bun run src/index.ts up [name|--all]               # Start containers
 bun run src/index.ts down [name|--all]             # Stop containers
 bun run src/index.ts list                          # Show all projects
@@ -66,3 +69,53 @@ bun run src/index.ts     # Run CLI
 ## Security Reference
 
 See `docs/SECURITY.md` for comprehensive OpenClaw security hardening guide based on 2026-03-20 research.
+
+---
+
+## For AI Agents: How to Use claw-farm in Other Projects
+
+If you're an AI agent working in a project that uses claw-farm (e.g., dog-agent, tamagochi), here's what you need to know:
+
+### Check if this project is managed by claw-farm
+Look for `.claw-farm.json` in the project root. It contains:
+```json
+{
+  "name": "project-name",
+  "processor": "builtin" or "mem0",
+  "port": 18789,
+  "createdAt": "2026-03-20T..."
+}
+```
+
+### Key files you should know about
+
+| File | Purpose | Can you edit? |
+|------|---------|---------------|
+| `openclaw/workspace/SOUL.md` | Agent personality & behavior rules | Yes — this defines who you are |
+| `openclaw/workspace/MEMORY.md` | Accumulated agent memory | Yes — OpenClaw updates this automatically |
+| `openclaw/workspace/skills/` | Custom skills directory | Yes — add new skills here |
+| `openclaw/config/openclaw.json5` | LLM model & plugin config | Only if user asks |
+| `openclaw/config/policy.yaml` | Tool access restrictions | Only if user asks |
+| `openclaw/raw/` | Immutable session logs | **NEVER delete or modify** |
+| `api-proxy/api_proxy.py` | Security proxy | Only if user asks |
+| `docker-compose.openclaw.yml` | Container orchestration | Only if user asks |
+
+### Important security rules
+1. **API keys are NOT in your environment.** They're in the api-proxy container. Don't look for them.
+2. **Your outbound requests are PII-filtered.** If you send user data to the LLM, sensitive patterns (SSN, phone numbers, etc.) are automatically redacted.
+3. **Your LLM responses are secret-scanned.** If the LLM accidentally outputs API keys or tokens, they're stripped before reaching you.
+4. **raw/ is sacred.** Layer 0 data is append-only and never deleted. This is how memory survives processor changes.
+5. **processed/ is disposable.** Layer 1 can be wiped and rebuilt with `claw-farm memory:rebuild`.
+
+### Registering this project with claw-farm
+If the project isn't registered yet:
+```bash
+cd /path/to/project
+bun run /path/to/claw-farm/src/index.ts init project-name --existing --processor mem0
+```
+
+### Starting/stopping
+```bash
+bun run /path/to/claw-farm/src/index.ts up project-name
+bun run /path/to/claw-farm/src/index.ts down project-name
+```
