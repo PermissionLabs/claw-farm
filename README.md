@@ -44,11 +44,11 @@ open http://localhost:18789
 
 ## Quick Start — Existing Project
 
-If you already have an OpenClaw setup (like dog-agent with docker-compose.yml):
+If you already have an OpenClaw setup (e.g., with docker-compose.yml):
 
 ```bash
-cd ~/projects/dog-agent
-claw-farm init dog-agent --existing --processor mem0
+cd ~/projects/my-existing-agent
+claw-farm init my-agent --existing --processor mem0
 ```
 
 This will:
@@ -57,10 +57,6 @@ This will:
 3. Generate `api-proxy/` sidecar (key isolation + PII filter)
 4. Generate `policy.yaml` (tool access restrictions)
 5. **NOT** overwrite your existing docker-compose.yml or openclaw config
-
-You can then either:
-- Use `claw-farm up` (uses the new `docker-compose.openclaw.yml`)
-- Keep your existing compose and just use claw-farm for registry/memory management
 
 ## Commands
 
@@ -82,23 +78,23 @@ User ──→ OpenClaw Dashboard (localhost:18789)
            │
            │ Agent calls LLM
            ▼
-        ┌─────────────────────────────────────────┐
-        │  api-proxy (internal network only)        │
-        │                                           │
-        │  Outbound: PII auto-redacted              │
-        │    "주민번호 880101-1234567"               │
-        │    → "[REDACTED_KR_RRN]"                  │
-        │                                           │
-        │  API key injected (agent never sees it)   │
-        │                                           │
-        │  ──→ Gemini API ──→ Response              │
-        │                                           │
-        │  Inbound: Secrets stripped                 │
-        │    "Found key: sk-ant-abc123..."          │
-        │    → "[REDACTED_ANTHROPIC_KEY]"           │
-        │                                           │
-        │  Audit log: logs/api-proxy-audit.jsonl    │
-        └─────────────────────────────────────────┘
+        ┌──────────────────────────────────────────┐
+        │  api-proxy (internal network only)         │
+        │                                            │
+        │  Outbound: PII auto-redacted               │
+        │    "SSN 880101-1234567"                    │
+        │    → "[REDACTED_KR_RRN]"                   │
+        │                                            │
+        │  API key injected (agent never sees it)    │
+        │                                            │
+        │  ──→ Gemini API ──→ Response               │
+        │                                            │
+        │  Inbound: Secrets stripped                  │
+        │    "Found key: sk-ant-abc123..."           │
+        │    → "[REDACTED_ANTHROPIC_KEY]"            │
+        │                                            │
+        │  Audit log: logs/api-proxy-audit.jsonl     │
+        └──────────────────────────────────────────┘
 ```
 
 **PII patterns detected:** Korean RRN/phone, US SSN/phone, credit cards, emails
@@ -158,6 +154,14 @@ git push origin main
 ```
 
 Recommended: Hetzner CX22 (~€4.35/mo) with Coolify self-hosted.
+
+## Documentation
+
+| Document | Contents |
+|----------|----------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Full architecture diagrams |
+| [docs/SECURITY.md](docs/SECURITY.md) | Security hardening guide |
+| [docs/ko/](docs/ko/) | Korean translations |
 
 ## License
 

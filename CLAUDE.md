@@ -4,16 +4,16 @@ Multi OpenClaw instance manager — scaffold, run, and deploy AI agents with per
 
 ## MANDATORY: Documentation Sync Rule
 
-> **아키텍처, 파일 구조, 보안 구조, 컨테이너 토폴로지, 데이터 흐름을 변경하면 반드시 아래 문서를 함께 업데이트하라.**
+> **When you change architecture, file structure, security, container topology, or data flow, you MUST update the corresponding docs.**
 >
-> | 문서 | 역할 | 언제 업데이트 |
-> |------|------|-------------|
-> | `docs/ARCHITECTURE.md` | **아키텍처 소스 오브 트루스.** 다이어그램, 파일 구조, 토폴로지, 데이터 흐름 | 구조 변경 시 **가장 먼저** 업데이트 |
-> | `docs/SECURITY.md` | 보안 설계 근거, 위협 모델, 체크리스트 | 보안 관련 변경 시 |
-> | `README.md` | 외부 사용자용 가이드 | 커맨드/설치 방법/구조 변경 시 |
-> | `CLAUDE.md` (이 파일) | AI 에이전트 + 개발자 인스트럭션 | 컨벤션/규칙 변경 시 |
+> | Document | Role | When to update |
+> |----------|------|---------------|
+> | `docs/ARCHITECTURE.md` | **Architecture source of truth.** Diagrams, file structure, topology, data flow | Update **first** on any structural change |
+> | `docs/SECURITY.md` | Security design rationale, threat model, checklists | On security-related changes |
+> | `README.md` | External user guide | On command/install/structure changes |
+> | `CLAUDE.md` (this file) | AI agent + developer instructions | On convention/rule changes |
 >
-> **docs/ARCHITECTURE.md가 최신 아키텍처의 단일 출처(single source of truth)다.** 다른 문서의 아키텍처 설명은 이 문서를 따른다. 충돌 시 ARCHITECTURE.md가 우선.
+> **`docs/ARCHITECTURE.md` is the single source of truth for architecture.** Other docs follow it. On conflict, ARCHITECTURE.md wins.
 
 ## Project Overview
 
@@ -22,9 +22,9 @@ Multi OpenClaw instance manager — scaffold, run, and deploy AI agents with per
 - **Package:** `@permissionlabs/claw-farm`
 - **Repo:** github.com/PermissionLabs/claw-farm (public, MIT)
 
-## Architecture (요약)
+## Architecture (summary)
 
-> 전체 다이어그램은 `docs/ARCHITECTURE.md` 참조.
+> Full diagrams: `docs/ARCHITECTURE.md`
 
 ```
 claw-farm CLI
@@ -34,9 +34,9 @@ claw-farm CLI
   └── templates/       # docker-compose, openclaw.json5, SOUL.md, policy.yaml, api-proxy, nginx
 ```
 
-**보안:** `OpenClaw ──(키 없음)──→ api-proxy ──(PII 리댁션 + 키 주입)──→ Gemini API ──→ (시크릿 스캔) ──→ 에이전트`
+**Security:** `OpenClaw ──(no key)──→ api-proxy ──(PII redaction + key injection)──→ Gemini API ──→ (secret scan) ──→ agent`
 
-**메모리:** Layer 0 (raw/, 불변) → Layer 1 (processed/, 교체 가능)
+**Memory:** Layer 0 (raw/, immutable) → Layer 1 (processed/, swappable)
 
 ## Commands
 
@@ -65,18 +65,19 @@ bun run src/index.ts     # Run CLI
 
 ## Conventions
 
-- Korean as default language for user-facing templates (SOUL.md, etc.)
+- Default language for user-facing templates (SOUL.md, etc.): Korean
 - GitHub org: PermissionLabs (always)
 - Squash merge only, branch protection on main
 - Commit messages: English, concise, "why" not "what"
 
 ## Key Documentation
 
-| 문서 | 내용 |
-|------|------|
-| `docs/ARCHITECTURE.md` | 전체 아키텍처 다이어그램 (파일 구조, 컨테이너 토폴로지, 데이터 흐름, 메모리 구조, 온보딩) |
-| `docs/SECURITY.md` | OpenClaw 보안 하드닝 가이드 (2026-03-20 리서치 기반, 8개 소스) |
-| `README.md` | 사용자 가이드 (설치, 퀵스타트, 커맨드 레퍼런스) |
+| Document | Contents |
+|----------|----------|
+| `docs/ARCHITECTURE.md` | Full architecture diagrams (file structure, container topology, data flow, memory, onboarding) |
+| `docs/SECURITY.md` | OpenClaw security hardening guide (2026-03-20 research, 8 sources) |
+| `docs/ko/` | Korean translations of docs |
+| `README.md` | User guide (install, quickstart, command reference) |
 
 ---
 
@@ -84,10 +85,10 @@ bun run src/index.ts     # Run CLI
 
 If you're an AI agent working in a project that uses claw-farm (e.g., dog-agent, tamagochi), here's what you need to know.
 
-**먼저 `docs/ARCHITECTURE.md`를 읽어서 전체 구조를 파악하라.**
+**Read `docs/ARCHITECTURE.md` first for full context.**
 
 ### Check if this project is managed by claw-farm
-Look for `.claw-farm.json` in the project root. It contains:
+Look for `.claw-farm.json` in the project root:
 ```json
 {
   "name": "project-name",
@@ -97,7 +98,7 @@ Look for `.claw-farm.json` in the project root. It contains:
 }
 ```
 
-### Key files you should know about
+### Key files
 
 | File | Purpose | Can you edit? |
 |------|---------|---------------|
@@ -110,25 +111,19 @@ Look for `.claw-farm.json` in the project root. It contains:
 | `api-proxy/api_proxy.py` | Security proxy | Only if user asks |
 | `docker-compose.openclaw.yml` | Container orchestration | Only if user asks |
 
-### Important security rules
+### Security rules
 1. **API keys are NOT in your environment.** They're in the api-proxy container. Don't look for them.
-2. **Your outbound requests are PII-filtered.** If you send user data to the LLM, sensitive patterns (SSN, phone numbers, etc.) are automatically redacted.
-3. **Your LLM responses are secret-scanned.** If the LLM accidentally outputs API keys or tokens, they're stripped before reaching you.
-4. **raw/ is sacred.** Layer 0 data is append-only and never deleted. This is how memory survives processor changes.
+2. **Outbound requests are PII-filtered.** Sensitive patterns (SSN, phone numbers, etc.) are automatically redacted.
+3. **LLM responses are secret-scanned.** API keys or tokens in responses are stripped before reaching you.
+4. **raw/ is sacred.** Layer 0 data is append-only and never deleted.
 5. **processed/ is disposable.** Layer 1 can be wiped and rebuilt with `claw-farm memory:rebuild`.
 
-### Registering this project with claw-farm
-If the project isn't registered yet:
+### Register / start / stop
 ```bash
-cd /path/to/project
-bun run /path/to/claw-farm/src/index.ts init project-name --existing --processor mem0
-```
-
-### Starting/stopping
-```bash
-bun run /path/to/claw-farm/src/index.ts up project-name
-bun run /path/to/claw-farm/src/index.ts down project-name
+claw-farm init project-name --existing --processor mem0
+claw-farm up project-name
+claw-farm down project-name
 ```
 
 ### If you change the architecture
-**You MUST update `docs/ARCHITECTURE.md` first**, then sync other docs as needed. See the "Documentation Sync Rule" at the top of this file.
+**You MUST update `docs/ARCHITECTURE.md` first**, then sync other docs. See the "Documentation Sync Rule" at the top.
