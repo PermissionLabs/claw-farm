@@ -2,6 +2,7 @@ import { portRange } from "../lib/ports.ts";
 
 /**
  * Mem0+Qdrant docker-compose template: 3-tier stack.
+ * Security: network isolation, read-only rootfs, resource limits, no raw env secrets in agent.
  */
 export function mem0ComposeTemplate(name: string, port: number): string {
   const ports = portRange(port);
@@ -17,6 +18,13 @@ services:
       - backend
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:6333/healthz"]
       interval: 5s
@@ -36,10 +44,18 @@ services:
     networks:
       - frontend
       - backend
+    read_only: true
+    tmpfs:
+      - /tmp:size=100M
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
     depends_on:
       qdrant:
         condition: service_healthy
@@ -58,15 +74,29 @@ services:
       - ./openclaw/config:/home/node/.openclaw:ro
       - ./openclaw/workspace:/home/node/.openclaw/workspace
       - ./openclaw/raw/sessions:/home/node/.openclaw/sessions
+      - ./openclaw/config/policy.yaml:/home/node/.openclaw/policy.yaml:ro
+      - ./logs:/home/node/.openclaw/logs
     environment:
       GEMINI_API_KEY: \${GEMINI_API_KEY}
       OPENCLAW_SANDBOX: 1
+      OPENCLAW_AUDIT_LOG: /home/node/.openclaw/logs/audit.jsonl
     networks:
       - frontend
+    read_only: true
+    tmpfs:
+      - /tmp:size=100M
+      - /home/node/.cache:size=200M
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 128M
     depends_on:
       mem0-api:
         condition: service_healthy
@@ -74,6 +104,8 @@ services:
 
 networks:
   frontend:
+    internal: false
   backend:
+    internal: true
 `;
 }

@@ -7,6 +7,7 @@ import { baseComposeTemplate } from "../templates/docker-compose.yml.ts";
 import { mem0ComposeTemplate } from "../templates/docker-compose.mem0.yml.ts";
 import { openclawConfigTemplate } from "../templates/openclaw.json5.ts";
 import { soulTemplate } from "../templates/SOUL.md.ts";
+import { policyTemplate } from "../templates/policy.yaml.ts";
 import { builtinProcessor } from "../processors/builtin.ts";
 import { mem0Processor } from "../processors/mem0.ts";
 
@@ -40,6 +41,7 @@ export async function initCommand(args: string[]): Promise<void> {
   await mkdir(join(projectDir, "openclaw", "config"), { recursive: true });
   await mkdir(join(projectDir, "openclaw", "workspace", "skills"), { recursive: true });
   await mkdir(join(projectDir, "openclaw", "processed"), { recursive: true });
+  await mkdir(join(projectDir, "logs"), { recursive: true });
   await ensureRawDirs(projectDir);
   console.log("✓ Created openclaw/ directory structure");
 
@@ -57,6 +59,13 @@ export async function initCommand(args: string[]): Promise<void> {
     openclawConfigTemplate(name, processor),
   );
   console.log("✓ Generated openclaw/config/openclaw.json5");
+
+  // Write policy.yaml (tool access restrictions)
+  await Bun.write(
+    join(projectDir, "openclaw", "config", "policy.yaml"),
+    policyTemplate(name),
+  );
+  console.log("✓ Generated openclaw/config/policy.yaml");
 
   // Write SOUL.md
   await Bun.write(
