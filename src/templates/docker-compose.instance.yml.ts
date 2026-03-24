@@ -15,8 +15,9 @@ services:
     build: ../../api-proxy
     expose:
       - "8080"
+    env_file:
+      - ../../.env
     environment:
-      GEMINI_API_KEY: \${GEMINI_API_KEY}
       AUDIT_LOG_PATH: /logs/api-proxy-audit.jsonl
       MAX_PROMPT_SIZE_MB: 5
       PII_MODE: redact
