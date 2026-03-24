@@ -26,3 +26,66 @@ export async function readProjectConfig(
     return null;
   }
 }
+
+/**
+ * Deep merge two objects. `override` values take priority over `base`.
+ * Arrays are replaced, not concatenated.
+ */
+export function deepMerge(
+  base: Record<string, unknown>,
+  override: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...base };
+  for (const key of Object.keys(override)) {
+    const baseVal = base[key];
+    const overVal = override[key];
+    if (
+      overVal !== null &&
+      typeof overVal === "object" &&
+      !Array.isArray(overVal) &&
+      baseVal !== null &&
+      typeof baseVal === "object" &&
+      !Array.isArray(baseVal)
+    ) {
+      result[key] = deepMerge(
+        baseVal as Record<string, unknown>,
+        overVal as Record<string, unknown>,
+      );
+    } else {
+      result[key] = overVal;
+    }
+  }
+  return result;
+}
+
+/**
+ * Merge claw-farm template config with existing user config.
+ * Template provides the base, user's existing config overrides on top.
+ * This preserves user-specific settings (gateway.auth, controlUi, etc.)
+ * while updating claw-farm managed fields (agents, models, env).
+ */
+export function mergeOpenclawConfig(
+  templateJson: string,
+  existingJson: string,
+): string {
+  try {
+    const template = JSON.parse(templateJson) as Record<string, unknown>;
+    const existing = JSON.parse(existingJson) as Record<string, unknown>;
+    const merged = deepMerge(template, existing);
+    // Re-apply template fields that claw-farm must control
+    // (user should not accidentally keep stale model/provider config)
+    merged.agents = deepMerge(
+      (existing.agents ?? {}) as Record<string, unknown>,
+      (template.agents ?? {}) as Record<string, unknown>,
+    );
+    merged.models = deepMerge(
+      (existing.models ?? {}) as Record<string, unknown>,
+      (template.models ?? {}) as Record<string, unknown>,
+    );
+    merged.env = template.env;
+    return JSON.stringify(merged, null, 2) + "\n";
+  } catch {
+    // If existing config is unparseable, just use template
+    return templateJson;
+  }
+}

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { resolveProjectName, type ProjectEntry } from "../lib/registry.ts";
-import { readProjectConfig } from "../lib/config.ts";
+import { readProjectConfig, mergeOpenclawConfig } from "../lib/config.ts";
 import { ensureRawDirs } from "../lib/raw-collector.ts";
 import { ensureTemplateDirs, templateDir, instanceDir } from "../lib/instance.ts";
 import { baseComposeTemplate } from "../templates/docker-compose.yml.ts";
@@ -47,12 +47,19 @@ export async function upgradeCommand(args: string[]): Promise<void> {
   console.log("✓ Updated docker-compose.openclaw.yml");
 
   const configPath = join(projectDir, "openclaw", "config", "openclaw.json");
+  const templateConfig = openclawConfigTemplate(projectName, processor);
+  let existingConfig: string | null = null;
   try {
-    const existing = await Bun.file(configPath).text();
-    await Bun.write(configPath + ".backup", existing);
+    existingConfig = await Bun.file(configPath).text();
+    await Bun.write(configPath + ".backup", existingConfig);
   } catch {}
-  await Bun.write(configPath, openclawConfigTemplate(projectName, processor));
-  console.log("✓ Updated openclaw/config/openclaw.json (backup → .backup)");
+  if (existingConfig) {
+    await Bun.write(configPath, mergeOpenclawConfig(templateConfig, existingConfig));
+    console.log("✓ Merged openclaw/config/openclaw.json (user settings preserved, backup → .backup)");
+  } else {
+    await Bun.write(configPath, templateConfig);
+    console.log("✓ Created openclaw/config/openclaw.json");
+  }
 
   await Bun.write(
     join(projectDir, "openclaw", "config", "policy.yaml"),
@@ -91,12 +98,19 @@ async function upgradeMultiInstance(
   await ensureTemplateDirs(projectDir);
 
   const configPath = join(tmplDir, "config", "openclaw.json");
+  const templateConfig = openclawConfigTemplate(projectName, processor);
+  let existingConfig: string | null = null;
   try {
-    const existing = await Bun.file(configPath).text();
-    await Bun.write(configPath + ".backup", existing);
+    existingConfig = await Bun.file(configPath).text();
+    await Bun.write(configPath + ".backup", existingConfig);
   } catch {}
-  await Bun.write(configPath, openclawConfigTemplate(projectName, processor));
-  console.log("✓ Updated template/config/openclaw.json (backup → .backup)");
+  if (existingConfig) {
+    await Bun.write(configPath, mergeOpenclawConfig(templateConfig, existingConfig));
+    console.log("✓ Merged template/config/openclaw.json (user settings preserved, backup → .backup)");
+  } else {
+    await Bun.write(configPath, templateConfig);
+    console.log("✓ Created template/config/openclaw.json");
+  }
 
   await Bun.write(
     join(tmplDir, "config", "policy.yaml"),
