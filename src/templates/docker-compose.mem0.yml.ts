@@ -113,7 +113,7 @@ services:
       - ./openclaw/workspace:/home/node/.openclaw/workspace
       - ./openclaw/raw/sessions:/home/node/.openclaw/sessions
       - ./openclaw/config/policy.yaml:/home/node/.openclaw/policy.yaml:ro
-      - ./logs:/home/node/.openclaw/logs
+      - openclaw-logs:/home/node/.openclaw/logs
     environment:
       # No GEMINI_API_KEY — agent cannot see it
       OPENCLAW_API_PROXY: http://api-proxy:8080
@@ -151,5 +151,8 @@ networks:
     internal: true    # openclaw ↔ mem0 only
   backend:
     internal: true    # mem0 ↔ qdrant only
+
+volumes:
+  openclaw-logs:
 `;
 }

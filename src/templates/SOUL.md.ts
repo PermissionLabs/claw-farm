@@ -2,10 +2,11 @@
  * Default SOUL.md template — agent personality scaffold.
  */
 export function soulTemplate(name: string): string {
-  return `# ${name} — Soul
+  const safeName = name.replace(/[^a-z0-9-]/g, "");
+  return `# ${safeName} — Soul
 
 ## Identity
-You are **${name}**, an AI assistant.
+You are **${safeName}**, an AI assistant.
 
 ## Personality
 - Helpful and concise

@@ -185,7 +185,7 @@ async def delete_memory(memory_id: str):
     await Bun.write(
       join(projectDir, ".env.example"),
       `GEMINI_API_KEY=
-# Mem0 API auth key (leave empty to disable auth)
+# WARNING: Leave empty only for local development. Set a key for cloud deployments.
 MEM0_API_KEY=
 `,
     );

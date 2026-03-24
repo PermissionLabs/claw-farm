@@ -23,6 +23,12 @@ export async function initCommand(args: string[]): Promise<void> {
     process.exit(1);
   }
 
+  const NAME_REGEX = /^[a-z0-9][a-z0-9-]{0,62}$/;
+  if (!NAME_REGEX.test(name)) {
+    console.error(`Invalid project name: "${name}". Use lowercase letters, numbers, and hyphens only (e.g., "my-agent").`);
+    process.exit(1);
+  }
+
   const processor = args.includes("--processor")
     ? (args[args.indexOf("--processor") + 1] as "builtin" | "mem0")
     : "builtin";

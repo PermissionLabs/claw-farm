@@ -199,12 +199,22 @@ def audit_log(entry: dict):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "upstream": UPSTREAM_BASE, "pii_mode": PII_MODE}
+    return {"status": "ok"}
 
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def proxy(request: Request, path: str):
     body = await request.body()
+
+    # --- Guard 0: Path validation (SSRF prevention) ---
+    ALLOWED_PATH_PREFIXES = ("v1beta/", "v1/", "v1alpha/", "v1beta1/")
+    if not any(path.startswith(p) for p in ALLOWED_PATH_PREFIXES):
+        audit_log({"event": "blocked", "reason": "invalid_path", "path": path})
+        return Response(
+            content=json.dumps({"error": "Path not allowed"}),
+            status_code=403,
+            media_type="application/json",
+        )
 
     # --- Guard 1: Content size ---
     if not check_content_size(body):
@@ -272,18 +282,16 @@ async def proxy(request: Request, path: str):
     # --- Forward with key injection ---
     upstream_url = f"{UPSTREAM_BASE}/{path}"
 
-    # Inject API key as query param (Gemini style)
-    separator = "&" if "?" in upstream_url else "?"
-    upstream_url = f"{upstream_url}{separator}key={GEMINI_API_KEY}"
+    # Forward only safe headers (allowlist, not blocklist)
+    FORWARD_HEADERS = {"content-type", "accept", "accept-encoding", "user-agent"}
+    headers = {k: v for k, v in request.headers.items() if k.lower() in FORWARD_HEADERS}
 
-    # Forward headers (minus hop-by-hop)
-    headers = dict(request.headers)
-    for h in ("host", "content-length", "transfer-encoding"):
-        headers.pop(h, None)
+    # Inject API key as header (not query param — avoids key leakage in logs/tracebacks)
+    headers["x-goog-api-key"] = GEMINI_API_KEY
 
     start = time.monotonic()
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=False) as client:
         upstream_resp = await client.request(
             method=request.method,
             url=upstream_url,

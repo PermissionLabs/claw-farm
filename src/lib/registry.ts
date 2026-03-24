@@ -32,9 +32,10 @@ export async function loadRegistry(): Promise<Registry> {
 }
 
 export async function saveRegistry(reg: Registry): Promise<void> {
-  const { mkdir } = await import("node:fs/promises");
-  await mkdir(REGISTRY_DIR, { recursive: true });
+  const { mkdir, chmod } = await import("node:fs/promises");
+  await mkdir(REGISTRY_DIR, { recursive: true, mode: 0o700 });
   await Bun.write(REGISTRY_PATH, JSON.stringify(reg, null, 2) + "\n");
+  await chmod(REGISTRY_PATH, 0o600);
 }
 
 export async function addProject(
