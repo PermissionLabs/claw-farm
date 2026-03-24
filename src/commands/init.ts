@@ -15,11 +15,13 @@ import {
 } from "../templates/api-proxy.ts";
 import { builtinProcessor } from "../processors/builtin.ts";
 import { mem0Processor } from "../processors/mem0.ts";
+import { ensureTemplateDirs, templateDir } from "../lib/instance.ts";
+import { contextTemplateContent } from "../templates/CONTEXT.template.md.ts";
 
 export async function initCommand(args: string[]): Promise<void> {
   const name = args.find((a) => !a.startsWith("-"));
   if (!name) {
-    console.error("Usage: claw-farm init <name> [--processor mem0] [--existing]");
+    console.error("Usage: claw-farm init <name> [--processor mem0] [--existing] [--multi]");
     process.exit(1);
   }
 
@@ -34,10 +36,15 @@ export async function initCommand(args: string[]): Promise<void> {
     : "builtin";
 
   const existing = args.includes("--existing");
+  const multi = args.includes("--multi");
   const projectDir = process.cwd();
 
   if (existing) {
     return registerExisting(name, projectDir, processor);
+  }
+
+  if (multi) {
+    return initMulti(name, projectDir, processor);
   }
 
   console.log(`\n🐾 Initializing claw-farm project: ${name}`);
@@ -248,4 +255,100 @@ async function registerExisting(
   console.log(`  1. Check .env has your GEMINI_API_KEY`);
   console.log(`  2. Run: claw-farm up ${name}`);
   console.log(`  3. Open: http://localhost:${entry.port}\n`);
+}
+
+async function initMulti(
+  name: string,
+  projectDir: string,
+  processor: "builtin" | "mem0",
+): Promise<void> {
+  console.log(`\n🐾 Initializing multi-instance project: ${name}`);
+  console.log(`   Processor: ${processor}`);
+  console.log(`   Mode: multi-instance`);
+  console.log(`   Directory: ${projectDir}\n`);
+
+  // Register in global registry (with multiInstance flag)
+  const entry = await addProject(name, projectDir, processor);
+
+  // Set multiInstance in registry
+  const { loadRegistry: loadReg, saveRegistry: saveReg } = await import("../lib/registry.ts");
+  const reg = await loadReg();
+  reg.projects[name].multiInstance = true;
+  reg.projects[name].instances = {};
+  await saveReg(reg);
+  console.log(`✓ Registered in global registry (port: ${entry.port}, multi-instance)`);
+
+  // Create template/ directory structure
+  const tmplDir = templateDir(projectDir);
+  await ensureTemplateDirs(projectDir);
+  await mkdir(join(projectDir, "logs"), { recursive: true });
+  console.log("✓ Created template/ directory structure");
+
+  // Write template files
+  await Bun.write(join(tmplDir, "SOUL.md"), soulTemplate(name));
+  console.log("✓ Generated template/SOUL.md");
+
+  await Bun.write(join(tmplDir, "AGENTS.md"), `# ${name} — Agents\n\n> Shared behavior rules for all instances.\n`);
+  console.log("✓ Generated template/AGENTS.md");
+
+  await Bun.write(join(tmplDir, "CONTEXT.template.md"), contextTemplateContent(name));
+  console.log("✓ Generated template/CONTEXT.template.md");
+
+  // Write config files
+  await Bun.write(
+    join(tmplDir, "config", "openclaw.json5"),
+    openclawConfigTemplate(name, processor),
+  );
+  console.log("✓ Generated template/config/openclaw.json5");
+
+  await Bun.write(
+    join(tmplDir, "config", "policy.yaml"),
+    policyTemplate(name),
+  );
+  console.log("✓ Generated template/config/policy.yaml");
+
+  // Write API Proxy sidecar
+  const proxyDir = join(projectDir, "api-proxy");
+  await mkdir(proxyDir, { recursive: true });
+  await Bun.write(join(proxyDir, "api_proxy.py"), apiProxyServerTemplate());
+  await Bun.write(join(proxyDir, "Dockerfile"), apiProxyDockerfileTemplate());
+  await Bun.write(join(proxyDir, "requirements.txt"), apiProxyRequirementsTemplate());
+  console.log("✓ Generated api-proxy/ (key isolation + PII filter)");
+
+  // Write .env.example
+  const envContent = processor === "mem0"
+    ? "GEMINI_API_KEY=\nMEM0_API_KEY=\n"
+    : "GEMINI_API_KEY=\n";
+  await Bun.write(join(projectDir, ".env.example"), envContent);
+  console.log("✓ Generated .env.example");
+
+  // Write .gitignore
+  await Bun.write(
+    join(projectDir, ".gitignore"),
+    `# Per-user instance data (claw-farm multi-instance)\ninstances/\n*.env\n`,
+  );
+  console.log("✓ Generated .gitignore");
+
+  // Write project config
+  await writeProjectConfig(projectDir, {
+    name,
+    processor,
+    port: entry.port,
+    createdAt: entry.createdAt,
+    multiInstance: true,
+  });
+  console.log("✓ Generated .claw-farm.json");
+
+  // Init processor-specific files
+  if (processor === "mem0") {
+    await mem0Processor.init(projectDir);
+    console.log("✓ Generated mem0/ sidecar files");
+  }
+
+  console.log(`\n✅ Multi-instance project "${name}" initialized!`);
+  console.log(`\nNext steps:`);
+  console.log(`  1. Copy .env.example to .env and fill in your API keys`);
+  console.log(`  2. Customize template/SOUL.md and template/CONTEXT.template.md`);
+  console.log(`  3. Spawn an instance: claw-farm spawn ${name} --user <user-id>`);
+  console.log(`  4. Open: http://localhost:<assigned-port>\n`);
 }

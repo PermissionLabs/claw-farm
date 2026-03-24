@@ -7,22 +7,38 @@ import { listCommand } from "./commands/list.ts";
 import { memoryRebuildCommand } from "./commands/memory-rebuild.ts";
 import { cloudComposeCommand } from "./commands/cloud-compose.ts";
 import { upgradeCommand } from "./commands/upgrade.ts";
+import { spawnCommand } from "./commands/spawn.ts";
+import { despawnCommand } from "./commands/despawn.ts";
+import { instancesCommand } from "./commands/instances.ts";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 const HELP = `
 claw-farm v${VERSION} — Multi OpenClaw Instance Manager
 
 Usage:
   claw-farm init <name>                  Scaffold OpenClaw project in current directory
+  claw-farm init <name> --multi          Scaffold multi-instance project (template/ structure)
   claw-farm init <name> --processor mem0 Scaffold with Mem0+Qdrant memory
   claw-farm init <name> --existing       Register existing setup without scaffolding
   claw-farm up [name|--all]              Start Docker Compose
+  claw-farm up <name> --user <id>        Start specific instance
   claw-farm down [name|--all]            Stop Docker Compose
+  claw-farm down <name> --user <id>      Stop specific instance
   claw-farm list                         Show all projects with status
+  claw-farm spawn <project> --user <id>  Create and start a new instance from template
+  claw-farm despawn <project> --user <id> Stop and remove an instance
+  claw-farm instances <project>          List all instances for a project
   claw-farm upgrade [name]               Re-generate claw-farm files with latest templates
   claw-farm memory:rebuild [name]        Rebuild processed memory from raw data
   claw-farm cloud:compose [outfile]      Generate unified cloud deploy compose
+
+Spawn options:
+  --context k=v k2=v2   Fill CONTEXT.template.md placeholders (space-separated)
+  --no-start             Create instance without starting containers
+
+Despawn options:
+  --keep-data            Keep instance data after stopping
 
 Options:
   -h, --help     Show this help
@@ -58,6 +74,15 @@ async function main() {
       case "list":
       case "ls":
         await listCommand();
+        break;
+      case "spawn":
+        await spawnCommand(commandArgs);
+        break;
+      case "despawn":
+        await despawnCommand(commandArgs);
+        break;
+      case "instances":
+        await instancesCommand(commandArgs);
         break;
       case "upgrade":
         await upgradeCommand(commandArgs);

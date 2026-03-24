@@ -249,23 +249,136 @@ User: "My dog's phone is 010-1234-5678 and SSN 880101-1234567..."
 - Processing layer is swappable (test new approaches instantly)
 - `claw-farm memory:rebuild` re-indexes from originals in one command
 
-## 6. Multi-Instance Operation
+## 6. Multi-Instance Architecture (Template + Per-User Isolation)
+
+### Single-Instance (default)
+
+Each project = one OpenClaw instance. Same as before.
+
+### Multi-Instance (`--multi`)
+
+When multiple users share one project (e.g., dog-agent), each user gets isolated memory and context while sharing the same agent personality and skills.
+
+```
+dog-agent/                             ← Project root
+├── .claw-farm.json                    ← multiInstance: true
+├── .gitignore                         ← instances/, *.env
+├── api-proxy/                         ← Shared security sidecar (in git)
+│
+├── template/                          ← ★ Shared files (in git, read-only mount)
+│   ├── SOUL.md                            Agent personality (same for all users)
+│   ├── AGENTS.md                          Behavior rules (same for all users)
+│   ├── skills/                            Custom skills (same for all users)
+│   ├── CONTEXT.template.md                Placeholders: {{USER_ID}}, {{NAME}}, etc.
+│   └── config/
+│       ├── openclaw.json5
+│       └── policy.yaml
+│
+└── instances/                         ← ★ Per-user data (gitignored)
+    ├── alice/
+    │   ├── docker-compose.openclaw.yml    Per-instance compose
+    │   ├── CONTEXT.md                     "Dog: Poppy, 3yo Maltese"
+    │   ├── MEMORY.md                      Alice's conversation memory
+    │   ├── raw/sessions/
+    │   ├── raw/workspace-snapshots/
+    │   ├── processed/
+    │   └── logs/
+    │
+    └── bob/
+        ├── docker-compose.openclaw.yml
+        ├── CONTEXT.md                     "Dog: Max, 5yo Golden Retriever"
+        ├── MEMORY.md                      Bob's conversation memory
+        ├── raw/sessions/
+        └── ...
+```
+
+**Key design:**
+- `SOUL.md` (shared): "I am a dog specialist AI" — same for all users
+- `CONTEXT.md` (per-user): "Dog: Poppy, 3yo Maltese, chicken allergy" — always loaded
+- `MEMORY.md` (per-user): Accumulated conversation memory — isolated per user
+- `template/` → git tracked. `instances/` → gitignored (user data stays local)
+
+### Per-Instance Container Isolation
+
+Each instance runs its own Docker Compose stack with unique container names and port:
+
+```
+$ claw-farm instances dog-agent
+┌──────────────────┬─────────┬───────────┐
+│ alice             │ 18790   │ 🟢 running │
+│ bob               │ 18791   │ 🟢 running │
+└──────────────────┴─────────┴───────────┘
+```
+
+Shared template files are mounted read-only into each instance:
+```yaml
+volumes:
+  # Config files mounted individually (avoids parent-dir shadowing)
+  - ../../template/config/openclaw.json5:/...openclaw.json5:ro
+  - ../../template/config/policy.yaml:/...policy.yaml:ro
+  # Shared workspace files
+  - ../../template/SOUL.md:/...workspace/SOUL.md:ro
+  - ../../template/AGENTS.md:/...workspace/AGENTS.md:ro
+  - ../../template/skills:/...workspace/skills:ro
+  # Per-instance data
+  - ./CONTEXT.md:/...workspace/CONTEXT.md       # per-user
+  - ./MEMORY.md:/...workspace/MEMORY.md         # per-user
+```
+
+### Multi-Instance Commands
+
+```bash
+claw-farm init dog-agent --multi             # Create template/ structure
+claw-farm spawn dog-agent --user alice \
+  --context name=Poppy breed=Maltese age=3   # Spawn instance from template
+claw-farm spawn dog-agent --user bob         # Another instance, different port
+claw-farm instances dog-agent                # List all instances
+claw-farm up dog-agent --user alice          # Start specific instance
+claw-farm down dog-agent --user bob          # Stop specific instance
+claw-farm despawn dog-agent --user bob       # Remove instance
+```
+
+### Programmatic API (for signup flows)
+
+```typescript
+import { spawn, despawn, listInstances } from "@permissionlabs/claw-farm";
+
+// User signs up → spawn their agent instance
+const { port } = await spawn({
+  project: "dog-agent",
+  userId: "user-123",
+  context: { name: "Poppy", breed: "Maltese", age: "3" },
+});
+
+// User's agent is now at http://localhost:${port}
+```
+
+### Migration (single → multi)
+
+First `spawn` on a single-instance project auto-migrates:
+1. Creates `template/` from existing `openclaw/workspace/` (SOUL.md, AGENTS.md, skills/, config/)
+2. Sets `multiInstance: true` in registry and config
+3. Creates `.gitignore` for `instances/`
+
+### Multi-Project Overview
 
 ```
 localhost
     │
-    ├── :18789  dog-agent    (mem0)    /permissionlabs/dog-agent
-    ├── :18790  tamagochi    (builtin) /permissionlabs/tamagochi
-    ├── :18791  tutor-bot    (mem0)    /permissionlabs/tutor-bot
+    ├── :18789  dog-agent    (builtin) multi: 2 instances
+    │   ├── :18790  alice
+    │   └── :18791  bob
+    ├── :18792  tamagochi    (builtin) single
+    ├── :18793  tutor-bot    (mem0)    single
     │
     │   $ claw-farm list
-    │   ┌──────────────┬───────┬───────────┐
-    │   │ dog-agent    │ 18789 │ 🟢 running │
-    │   │ tamagochi    │ 18790 │ ⚪ stopped │
-    │   │ tutor-bot    │ 18791 │ 🟢 running │
-    │   └──────────────┴───────┴───────────┘
+    │   ┌──────────────┬───────┬───────────┬────────────┐
+    │   │ dog-agent    │ 18789 │ 🟢 running │ 2          │
+    │   │ tamagochi    │ 18792 │ ⚪ stopped │ -          │
+    │   │ tutor-bot    │ 18793 │ 🟢 running │ -          │
+    │   └──────────────┴───────┴───────────┴────────────┘
     │
-    │   $ claw-farm up --all     # Start all
+    │   $ claw-farm up --all     # Start all (including all instances)
     │   $ claw-farm down --all   # Stop all
     │
     ▼

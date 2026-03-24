@@ -1,17 +1,33 @@
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+
+export interface ComposeOptions {
+  /** Override compose file path (default: docker-compose.openclaw.yml in projectDir) */
+  composePath?: string;
+  /** Docker compose project name (-p flag) for container isolation */
+  projectName?: string;
+}
 
 export async function runCompose(
   projectDir: string,
   action: "up" | "down",
+  options?: ComposeOptions,
 ): Promise<void> {
-  const composePath = join(projectDir, "docker-compose.openclaw.yml");
-  const args =
-    action === "up"
-      ? ["docker", "compose", "-f", composePath, "up", "-d"]
-      : ["docker", "compose", "-f", composePath, "down"];
+  const composePath = options?.composePath ?? join(projectDir, "docker-compose.openclaw.yml");
+  const cwd = options?.composePath ? dirname(composePath) : projectDir;
+
+  const args = ["docker", "compose", "-f", composePath];
+  if (options?.projectName) {
+    args.push("-p", options.projectName);
+  }
+
+  if (action === "up") {
+    args.push("up", "-d");
+  } else {
+    args.push("down");
+  }
 
   const proc = Bun.spawn(args, {
-    cwd: projectDir,
+    cwd,
     stdout: "inherit",
     stderr: "inherit",
   });
@@ -23,15 +39,22 @@ export async function runCompose(
 
 export async function getComposeStatus(
   projectDir: string,
-): Promise<string> {
-  const composePath = join(projectDir, "docker-compose.openclaw.yml");
+  options?: ComposeOptions,
+): Promise<"running" | "stopped" | "unknown"> {
+  const composePath = options?.composePath ?? join(projectDir, "docker-compose.openclaw.yml");
+  const cwd = options?.composePath ? dirname(composePath) : projectDir;
+
+  const args = ["docker", "compose", "-f", composePath];
+  if (options?.projectName) {
+    args.push("-p", options.projectName);
+  }
+  args.push("ps", "--format", "json");
+
   try {
-    const proc = Bun.spawn(
-      ["docker", "compose", "-f", composePath, "ps", "--format", "json"],
-      { cwd: projectDir, stdout: "pipe", stderr: "pipe" },
-    );
+    const proc = Bun.spawn(args, { cwd, stdout: "pipe", stderr: "pipe" });
     const output = await new Response(proc.stdout).text();
-    await proc.exited;
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) return "unknown";
     if (!output.trim()) return "stopped";
     return "running";
   } catch {

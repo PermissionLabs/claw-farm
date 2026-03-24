@@ -5,6 +5,7 @@ export interface ClawFarmConfig {
   processor: "builtin" | "mem0";
   port: number;
   createdAt: string;
+  multiInstance?: boolean;
 }
 
 export async function writeProjectConfig(
