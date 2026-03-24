@@ -59,6 +59,47 @@ export function deepMerge(
 }
 
 /**
+ * Strip JS-style comments from a JSON-like string so JSON.parse can handle it.
+ * Handles // line comments and /* block comments *\/ outside of strings.
+ */
+function stripJsonComments(text: string): string {
+  let result = "";
+  let i = 0;
+  while (i < text.length) {
+    // String literal — pass through unchanged
+    if (text[i] === '"') {
+      result += '"';
+      i++;
+      while (i < text.length && text[i] !== '"') {
+        if (text[i] === "\\") {
+          result += text[i] + (text[i + 1] ?? "");
+          i += 2;
+        } else {
+          result += text[i];
+          i++;
+        }
+      }
+      if (i < text.length) {
+        result += '"';
+        i++;
+      }
+    } else if (text[i] === "/" && text[i + 1] === "/") {
+      // Line comment — skip to end of line
+      while (i < text.length && text[i] !== "\n") i++;
+    } else if (text[i] === "/" && text[i + 1] === "*") {
+      // Block comment — skip to */
+      i += 2;
+      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++;
+      i += 2;
+    } else {
+      result += text[i];
+      i++;
+    }
+  }
+  return result;
+}
+
+/**
  * Merge claw-farm template config with existing user config.
  * Template provides the base, user's existing config overrides on top.
  * This preserves user-specific settings (gateway.auth, controlUi, etc.)
@@ -69,8 +110,9 @@ export function mergeOpenclawConfig(
   existingJson: string,
 ): string {
   try {
-    const template = JSON.parse(templateJson) as Record<string, unknown>;
-    const existing = JSON.parse(existingJson) as Record<string, unknown>;
+    const template = JSON.parse(stripJsonComments(templateJson)) as Record<string, unknown>;
+    const existing = JSON.parse(stripJsonComments(existingJson)) as Record<string, unknown>;
+    // Base merge: template as base, existing overrides (preserves user keys)
     const merged = deepMerge(template, existing);
     // Re-apply template fields that claw-farm must control
     // (user should not accidentally keep stale model/provider config)
@@ -83,6 +125,8 @@ export function mergeOpenclawConfig(
       (template.models ?? {}) as Record<string, unknown>,
     );
     merged.env = template.env;
+    // Remove root-level controlUi if present (OpenClaw reads gateway.controlUi)
+    delete merged.controlUi;
     return JSON.stringify(merged, null, 2) + "\n";
   } catch {
     // If existing config is unparseable, just use template
