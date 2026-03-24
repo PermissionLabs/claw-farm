@@ -75,6 +75,8 @@ export async function upgradeCommand(args: string[]): Promise<void> {
 
   console.log(`\n✅ ${projectName} upgraded!`);
   console.log(`\n   Not touched: .env, SOUL.md, MEMORY.md, AGENTS.md, skills/, raw/`);
+  console.log(`   💡 Custom compose settings? Put them in docker-compose.openclaw.override.yml`);
+  console.log(`      (auto-merged on up/down, survives upgrade)`);
   console.log(`   Run: claw-farm up ${projectName}\n`);
 }
 
@@ -130,5 +132,7 @@ async function upgradeMultiInstance(
 
   console.log(`\n✅ ${projectName} upgraded!`);
   console.log(`\n   Not touched: .env, SOUL.md, AGENTS.md, skills/, CONTEXT.md, MEMORY.md, raw/`);
+  console.log(`   💡 Custom compose settings? Put them in docker-compose.openclaw.override.yml`);
+  console.log(`      (auto-merged on up/down, survives upgrade)`);
   console.log(`   Run: claw-farm up ${projectName}\n`);
 }

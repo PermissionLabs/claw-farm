@@ -1,4 +1,14 @@
 import { join, dirname } from "node:path";
+import { access } from "node:fs/promises";
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export interface ComposeOptions {
   /** Override compose file path (default: docker-compose.openclaw.yml in projectDir) */
@@ -16,6 +26,13 @@ export async function runCompose(
   const cwd = options?.composePath ? dirname(composePath) : projectDir;
 
   const args = ["docker", "compose", "-f", composePath];
+
+  // Auto-load override file if it exists (user customizations survive upgrade)
+  const overridePath = composePath.replace(".yml", ".override.yml");
+  if (await fileExists(overridePath)) {
+    args.push("-f", overridePath);
+  }
+
   if (options?.projectName) {
     args.push("-p", options.projectName);
   }
