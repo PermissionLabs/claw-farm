@@ -279,8 +279,32 @@ async def proxy(request: Request, path: str):
     # --- Guard 3: Content hash for audit trail ---
     content_hash = hashlib.sha256(body).hexdigest()[:16] if body else "empty"
 
+    # --- Guard 5: Disable Gemini thinking tokens ---
+    # OpenClaw may inject thinking/reasoning params that Gemini can't handle properly,
+    # causing empty responses (known OpenClaw bugs: #33272, #14456, #14071).
+    # Force thinkingBudget: 0 to prevent thinking tokens in responses.
+    try:
+        data = json.loads(body)
+        if isinstance(data, dict):
+            generation_config = data.get("generationConfig", {})
+            if not isinstance(generation_config, dict):
+                generation_config = {}
+            generation_config["thinkingConfig"] = {"thinkingBudget": 0}
+            data["generationConfig"] = generation_config
+            body = json.dumps(data).encode()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        pass  # Non-JSON body, forward as-is
+
     # --- Forward with key injection ---
     upstream_url = f"{UPSTREAM_BASE}/{path}"
+
+    # Query string allowlist (security: only forward known-safe params, never forward "key")
+    ALLOWED_QUERY_PARAMS = {"alt"}
+    filtered_qs = "&".join(
+        f"{k}={v}" for k, v in request.query_params.items() if k in ALLOWED_QUERY_PARAMS
+    )
+    if filtered_qs:
+        upstream_url += f"?{filtered_qs}"
 
     # Forward only safe headers (allowlist, not blocklist)
     FORWARD_HEADERS = {"content-type", "accept", "accept-encoding", "user-agent"}
