@@ -36,6 +36,12 @@ ${plugins}
   "dashboard": {
     "port": 18789,
     "host": "0.0.0.0"
+  },
+
+  // Gateway — bind to LAN so Docker port-forwarding works
+  "gateway": {
+    "bind": "lan",
+    "port": 18789
   }
 }
 `;
