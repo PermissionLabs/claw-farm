@@ -41,7 +41,7 @@ OpenClaw ──(no key)──→ API Proxy ──(key injection)──→ LLM AP
 ### claw-farm Implementation
 - `api-proxy/` sidecar: FastAPI, key injection, audit logging
 - OpenClaw container has NO `GEMINI_API_KEY`
-- `openclaw.json5` uses `apiKey: "proxied"`
+- `openclaw.json` uses `apiKey: "proxied"`
 
 ---
 

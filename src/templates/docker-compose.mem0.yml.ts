@@ -110,7 +110,7 @@ services:
       - "127.0.0.1:${ports.openclaw}:18789"
     volumes:
       # Config files mounted individually (OpenClaw needs to write temp files in .openclaw/)
-      - ./openclaw/config/openclaw.json5:/home/node/.openclaw/openclaw.json5:ro
+      - ./openclaw/config/openclaw.json:/home/node/.openclaw/openclaw.json:ro
       - ./openclaw/config/policy.yaml:/home/node/.openclaw/policy.yaml:ro
       - ./openclaw/workspace:/home/node/.openclaw/workspace
       - ./openclaw/raw/sessions:/home/node/.openclaw/sessions

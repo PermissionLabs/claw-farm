@@ -42,6 +42,11 @@ ${plugins}
   "gateway": {
     "bind": "lan",
     "port": 18789
+  },
+
+  // Control UI disabled to reduce memory usage (SEA binary V8 heap limit)
+  "controlUi": {
+    "enabled": false
   }
 }
 `;

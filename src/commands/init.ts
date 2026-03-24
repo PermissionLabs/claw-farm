@@ -5,7 +5,7 @@ import { writeProjectConfig } from "../lib/config.ts";
 import { ensureRawDirs } from "../lib/raw-collector.ts";
 import { baseComposeTemplate } from "../templates/docker-compose.yml.ts";
 import { mem0ComposeTemplate } from "../templates/docker-compose.mem0.yml.ts";
-import { openclawConfigTemplate } from "../templates/openclaw.json5.ts";
+import { openclawConfigTemplate } from "../templates/openclaw.json.ts";
 import { soulTemplate } from "../templates/SOUL.md.ts";
 import { policyTemplate } from "../templates/policy.yaml.ts";
 import {
@@ -73,10 +73,10 @@ export async function initCommand(args: string[]): Promise<void> {
 
   // Write OpenClaw config
   await Bun.write(
-    join(projectDir, "openclaw", "config", "openclaw.json5"),
+    join(projectDir, "openclaw", "config", "openclaw.json"),
     openclawConfigTemplate(name, processor),
   );
-  console.log("✓ Generated openclaw/config/openclaw.json5");
+  console.log("✓ Generated openclaw/config/openclaw.json");
 
   // Write policy.yaml (tool access restrictions)
   await Bun.write(
@@ -173,19 +173,19 @@ async function registerExisting(
   await Bun.write(composePath, composeContent);
   console.log("✓ Generated docker-compose.openclaw.yml");
 
-  // Backup and update openclaw.json5 to use api-proxy
-  const configPath = join(projectDir, "openclaw", "config", "openclaw.json5");
+  // Backup and update openclaw.json to use api-proxy
+  const configPath = join(projectDir, "openclaw", "config", "openclaw.json");
   try {
     const existing = await Bun.file(configPath).text();
     // Backup existing config
     const backupPath = configPath + ".backup";
     await Bun.write(backupPath, existing);
-    console.log(`✓ Backed up existing openclaw.json5 → openclaw.json5.backup`);
+    console.log(`✓ Backed up existing openclaw.json → openclaw.json.backup`);
   } catch {
     // No existing config — that's fine
   }
   await Bun.write(configPath, openclawConfigTemplate(name, processor));
-  console.log("✓ Generated openclaw/config/openclaw.json5 (routes through api-proxy)");
+  console.log("✓ Generated openclaw/config/openclaw.json (routes through api-proxy)");
 
   // Add policy.yaml if missing
   const policyPath = join(projectDir, "openclaw", "config", "policy.yaml");
@@ -296,10 +296,10 @@ async function initMulti(
 
   // Write config files
   await Bun.write(
-    join(tmplDir, "config", "openclaw.json5"),
+    join(tmplDir, "config", "openclaw.json"),
     openclawConfigTemplate(name, processor),
   );
-  console.log("✓ Generated template/config/openclaw.json5");
+  console.log("✓ Generated template/config/openclaw.json");
 
   await Bun.write(
     join(tmplDir, "config", "policy.yaml"),

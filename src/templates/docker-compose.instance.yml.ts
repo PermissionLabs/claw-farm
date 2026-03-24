@@ -50,7 +50,7 @@ services:
       - "127.0.0.1:${port}:18789"
     volumes:
       # Shared config files (read-only, mounted individually to avoid shadowing)
-      - ../../template/config/openclaw.json5:/home/node/.openclaw/openclaw.json5:ro
+      - ../../template/config/openclaw.json:/home/node/.openclaw/openclaw.json:ro
       - ../../template/config/policy.yaml:/home/node/.openclaw/policy.yaml:ro
       # Shared template files (read-only)
       - ../../template/SOUL.md:/home/node/.openclaw/workspace/SOUL.md:ro

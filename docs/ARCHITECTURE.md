@@ -71,7 +71,7 @@ my-agent/
 │
 ├── openclaw/
 │   ├── config/
-│   │   ├── openclaw.json5          ← LLM config (no keys! routes through proxy)
+│   │   ├── openclaw.json          ← LLM config (no keys! routes through proxy)
 │   │   └── policy.yaml             ← Tool access restrictions (fs, http, shell)
 │   │
 │   ├── workspace/                  ← ★ Agent read/write space
@@ -295,7 +295,7 @@ dog-agent/                             ← Project root
 │   ├── skills/                            Custom skills (same for all users)
 │   ├── CONTEXT.template.md                Placeholders: {{USER_ID}}, {{NAME}}, etc.
 │   └── config/
-│       ├── openclaw.json5
+│       ├── openclaw.json
 │       └── policy.yaml
 │
 └── instances/                         ← ★ Per-user data (gitignored)
@@ -338,7 +338,7 @@ Shared template files are mounted read-only into each instance:
 ```yaml
 volumes:
   # Config files mounted individually (avoids parent-dir shadowing)
-  - ../../template/config/openclaw.json5:/...openclaw.json5:ro
+  - ../../template/config/openclaw.json:/...openclaw.json:ro
   - ../../template/config/policy.yaml:/...policy.yaml:ro
   # Shared workspace files
   - ../../template/SOUL.md:/...workspace/SOUL.md:ro
@@ -420,7 +420,7 @@ my-project (before)                 my-project (after claw-farm init --existing)
 ├── .env                            ├── .env                  (untouched)
 ├── openclaw/                       ├── openclaw/
 │   ├── config/                     │   ├── config/
-│   │   └── openclaw.json5          │   │   ├── openclaw.json5 (untouched)
+│   │   └── openclaw.json          │   │   ├── openclaw.json (untouched)
 │   └── workspace/                  │   │   └── policy.yaml    ★ added
 │       ├── SOUL.md                 │   ├── workspace/         (untouched)
 │       ├── MEMORY.md               │   ├── raw/               ★ added

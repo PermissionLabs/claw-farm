@@ -160,7 +160,7 @@ my-agent/
     requirements.txt
   openclaw/
     config/
-      openclaw.json5             # LLM config (routes through proxy, no raw keys)
+      openclaw.json             # LLM config (routes through proxy, no raw keys)
       policy.yaml                # Tool access restrictions
     workspace/
       SOUL.md                    # Agent personality

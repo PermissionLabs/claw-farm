@@ -43,7 +43,7 @@ claw-farm CLI
   ├── commands/        # init, up, down, list, spawn, despawn, instances, upgrade, memory:rebuild, cloud:compose
   ├── lib/             # registry, compose, config, ports, raw-collector, instance, migrate, api
   ├── processors/      # interface, builtin (MEMORY.md), mem0 (Qdrant)
-  └── templates/       # docker-compose, docker-compose.instance, docker-compose.mem0, CONTEXT.template, openclaw.json5, SOUL.md, policy.yaml, api-proxy, nginx-proxy
+  └── templates/       # docker-compose, docker-compose.instance, docker-compose.mem0, CONTEXT.template, openclaw.json, SOUL.md, policy.yaml, api-proxy, nginx-proxy
 ```
 
 **Multi-Instance:** `init --multi` creates `template/` + `instances/` structure. `spawn --user` creates per-user isolated instances with shared template files.
@@ -127,7 +127,7 @@ Look for `.claw-farm.json` in the project root:
 | `openclaw/workspace/SOUL.md` | Agent personality & behavior rules | Yes — this defines who you are |
 | `openclaw/workspace/MEMORY.md` | Accumulated agent memory | Yes — OpenClaw updates this automatically |
 | `openclaw/workspace/skills/` | Custom skills directory | Yes — add new skills here |
-| `openclaw/config/openclaw.json5` | LLM model & plugin config | Only if user asks |
+| `openclaw/config/openclaw.json` | LLM model & plugin config | Only if user asks |
 | `openclaw/config/policy.yaml` | Tool access restrictions | Only if user asks |
 | `openclaw/raw/` | Immutable session logs | **NEVER delete or modify** |
 | `api-proxy/api_proxy.py` | Security proxy | Only if user asks |
