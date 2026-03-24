@@ -28,11 +28,13 @@ Multi OpenClaw instance manager — scaffold, run, and deploy AI agents with per
 
 ```
 claw-farm CLI
-  ├── commands/        # init, up, down, list, memory:rebuild, cloud:compose
-  ├── lib/             # registry, compose, config, ports, raw-collector
+  ├── commands/        # init, up, down, list, spawn, despawn, instances, memory:rebuild, cloud:compose
+  ├── lib/             # registry, compose, config, ports, raw-collector, instance, migrate, api
   ├── processors/      # interface, builtin (MEMORY.md), mem0 (Qdrant)
-  └── templates/       # docker-compose, openclaw.json5, SOUL.md, policy.yaml, api-proxy, nginx
+  └── templates/       # docker-compose, docker-compose.instance, CONTEXT.template, openclaw.json5, SOUL.md, ...
 ```
+
+**Multi-Instance:** `init --multi` creates `template/` + `instances/` structure. `spawn --user` creates per-user isolated instances with shared template files.
 
 **Security:** `OpenClaw ──(no key)──→ api-proxy ──(PII redaction + key injection)──→ Gemini API ──→ (secret scan) ──→ agent`
 
@@ -41,11 +43,17 @@ claw-farm CLI
 ## Commands
 
 ```bash
-bun run src/index.ts init <name>                  # Scaffold project
+bun run src/index.ts init <name>                   # Scaffold project
+bun run src/index.ts init <name> --multi           # Scaffold multi-instance project
 bun run src/index.ts init <name> --processor mem0  # With Mem0+Qdrant
 bun run src/index.ts init <name> --existing        # Register existing + add security layer
 bun run src/index.ts up [name|--all]               # Start containers
+bun run src/index.ts up <name> --user <id>         # Start specific instance
 bun run src/index.ts down [name|--all]             # Stop containers
+bun run src/index.ts down <name> --user <id>       # Stop specific instance
+bun run src/index.ts spawn <project> --user <id>   # Create + start instance from template
+bun run src/index.ts despawn <project> --user <id> # Stop + remove instance
+bun run src/index.ts instances <project>           # List all instances
 bun run src/index.ts list                          # Show all projects
 bun run src/index.ts memory:rebuild [name]         # Rebuild Layer 1 from raw
 bun run src/index.ts cloud:compose [outfile]       # Generate cloud compose
@@ -65,7 +73,7 @@ bun run src/index.ts     # Run CLI
 
 ## Conventions
 
-- Default language for user-facing templates (SOUL.md, etc.): Korean
+- Default language for user-facing templates (SOUL.md, etc.): English
 - GitHub org: PermissionLabs (always)
 - Squash merge only, branch protection on main
 - Commit messages: English, concise, "why" not "what"
@@ -94,11 +102,12 @@ Look for `.claw-farm.json` in the project root:
   "name": "project-name",
   "processor": "builtin" or "mem0",
   "port": 18789,
-  "createdAt": "2026-03-20T..."
+  "createdAt": "2026-03-20T...",
+  "multiInstance": true  // optional — if true, uses template/ + instances/ structure
 }
 ```
 
-### Key files
+### Key files (single-instance)
 
 | File | Purpose | Can you edit? |
 |------|---------|---------------|
@@ -110,6 +119,18 @@ Look for `.claw-farm.json` in the project root:
 | `openclaw/raw/` | Immutable session logs | **NEVER delete or modify** |
 | `api-proxy/api_proxy.py` | Security proxy | Only if user asks |
 | `docker-compose.openclaw.yml` | Container orchestration | Only if user asks |
+
+### Key files (multi-instance)
+
+| File | Purpose | Can you edit? |
+|------|---------|---------------|
+| `template/SOUL.md` | Shared agent personality | Yes — shared across all instances |
+| `template/AGENTS.md` | Shared behavior rules | Yes — shared across all instances |
+| `template/skills/` | Shared custom skills | Yes — shared across all instances |
+| `template/CONTEXT.template.md` | Per-user context template | Yes — defines placeholders |
+| `instances/<user>/CONTEXT.md` | Per-user context (filled) | Yes — user-specific info |
+| `instances/<user>/MEMORY.md` | Per-user memory | Yes — isolated per user |
+| `instances/<user>/raw/` | Per-user immutable logs | **NEVER delete or modify** |
 
 ### Security rules
 1. **API keys are NOT in your environment.** They're in the api-proxy container. Don't look for them.

@@ -63,13 +63,44 @@ This will:
 | Command | Description |
 |---------|-------------|
 | `claw-farm init <name>` | Scaffold OpenClaw project |
+| `claw-farm init <name> --multi` | Scaffold multi-instance project (template/ structure) |
 | `claw-farm init <name> --processor mem0` | Scaffold with Mem0+Qdrant |
 | `claw-farm init <name> --existing` | Register existing project + add security layer |
 | `claw-farm up [name\|--all]` | Start Docker Compose |
+| `claw-farm up <name> --user <id>` | Start specific instance |
 | `claw-farm down [name\|--all]` | Stop Docker Compose |
+| `claw-farm down <name> --user <id>` | Stop specific instance |
+| `claw-farm spawn <project> --user <id>` | Create and start instance from template |
+| `claw-farm despawn <project> --user <id>` | Stop and remove instance |
+| `claw-farm instances <project>` | List all instances for a project |
 | `claw-farm list` | Show all projects + status |
 | `claw-farm memory:rebuild [name]` | Rebuild memory from raw data |
 | `claw-farm cloud:compose [outfile]` | Generate cloud deployment compose |
+
+## Quick Start — Multi-Instance (Per-User Isolation)
+
+When multiple users share one agent (e.g., each user has their own dog):
+
+```bash
+mkdir dog-agent && cd dog-agent
+claw-farm init dog-agent --multi
+
+# Customize template/SOUL.md (shared personality) and
+# template/CONTEXT.template.md (per-user placeholders)
+
+# Spawn instances for each user
+claw-farm spawn dog-agent --user alice --context name=Poppy breed=Maltese age=3
+claw-farm spawn dog-agent --user bob --context name=Max breed=Golden age=5
+
+# List instances
+claw-farm instances dog-agent
+
+# Programmatic API (for signup flows)
+# import { spawn } from "@permissionlabs/claw-farm"
+```
+
+Each user gets: isolated MEMORY.md, their own CONTEXT.md, own port.
+Shared across users: SOUL.md, AGENTS.md, skills/, config/.
 
 ## Security Architecture
 

@@ -1,8 +1,11 @@
 {
   "name": "@permissionlabs/claw-farm",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Multi OpenClaw instance manager — scaffold, run, and deploy AI agents with persistent memory",
   "type": "module",
+  "exports": {
+    ".": "./src/lib/api.ts"
+  },
   "bin": {
     "claw-farm": "./src/index.ts"
   },
