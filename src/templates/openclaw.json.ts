@@ -39,7 +39,8 @@ export function openclawConfigTemplate(
   "models": {
     "providers": {
       "google": {
-        "baseUrl": "http://api-proxy:8080/v1beta"
+        "baseUrl": "http://api-proxy:8080/v1beta",
+        "models": []
       }
     }
   },
