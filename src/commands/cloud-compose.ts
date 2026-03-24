@@ -1,7 +1,12 @@
-import { resolve, relative } from "node:path";
+import { resolve, relative, join } from "node:path";
+import { mkdir } from "node:fs/promises";
 import { loadRegistry } from "../lib/registry.ts";
 import { readProjectConfig } from "../lib/config.ts";
 import { portRange } from "../lib/ports.ts";
+import {
+  nginxProxyTemplate,
+  nginxDockerfileTemplate,
+} from "../templates/nginx-proxy.ts";
 
 export async function cloudComposeCommand(args: string[]): Promise<void> {
   const reg = await loadRegistry();
@@ -12,7 +17,8 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
     return;
   }
 
-  const outFile = args.find((a) => !a.startsWith("-")) ?? "docker-compose.cloud.yml";
+  const outFile =
+    args.find((a) => !a.startsWith("-")) ?? "docker-compose.cloud.yml";
 
   // Output path validation — must stay within cwd
   const resolved = resolve(process.cwd(), outFile);
@@ -23,10 +29,17 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
   }
 
   let services = "";
-  let networks = "networks:\n";
-  let volumes = "volumes:\n";
   const usedNetworks = new Set<string>();
   const usedVolumes = new Set<string>();
+  const nginxProjects: Array<{
+    name: string;
+    port: number;
+    containerName: string;
+  }> = [];
+
+  // Shared networks for cloud isolation
+  usedNetworks.add("public-net"); // nginx ↔ host (port binding)
+  usedNetworks.add("egress-net"); // api-proxy ↔ internet (Gemini API)
 
   for (const name of names) {
     const entry = reg.projects[name];
@@ -38,7 +51,13 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
     const openclawLogsVol = `${name}-openclaw-logs`;
     usedVolumes.add(openclawLogsVol);
 
-    // API Proxy service (per project — holds the API key)
+    nginxProjects.push({
+      name,
+      port: ports.openclaw,
+      containerName: `${name}-openclaw`,
+    });
+
+    // API Proxy: proxy-net (internal, ↔ openclaw) + egress-net (outbound to Gemini)
     services += `  ${name}-api-proxy:
     build: ./${name}/api-proxy
     expose:
@@ -52,6 +71,7 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
       - ./${name}/logs:/logs
     networks:
       - ${proxyNet}
+      - egress-net
     read_only: true
     tmpfs:
       - /tmp:size=50M
@@ -73,13 +93,15 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
 
 `;
 
-    // OpenClaw service (no API key — routes through api-proxy)
+    // OpenClaw: proxy-net (internal only) — NO internet, NO port binding
+    // nginx proxies to it via proxy-net
     services += `  ${name}-openclaw:
     image: ghcr.io/openclaw/openclaw:latest
-    ports:
-      - "${ports.openclaw}:18789"
+    expose:
+      - "18789"
     volumes:
-      - ./${name}/openclaw/config:/home/node/.openclaw:ro
+      - ./${name}/openclaw/config/openclaw.json:/home/node/.openclaw/openclaw.json:ro
+      - ./${name}/openclaw/config/policy.yaml:/home/node/.openclaw/policy.yaml:ro
       - ./${name}/openclaw/workspace:/home/node/.openclaw/workspace
       - ./${name}/openclaw/raw/sessions:/home/node/.openclaw/sessions
       - ${openclawLogsVol}:/home/node/.openclaw/logs
@@ -93,6 +115,8 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
     tmpfs:
       - /tmp:size=100M
       - /home/node/.cache:size=200M
+      - /home/node/.openclaw:size=50M,uid=1000,gid=1000
+      - /home/node/.openclaw/workspace:size=10M,uid=1000,gid=1000
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -108,29 +132,23 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
       ${name}-api-proxy:
         condition: service_healthy
     restart: unless-stopped
+
 `;
 
     if (processor === "mem0") {
-      const netName = `${name}-net`;
-      usedNetworks.add(netName);
+      const backendNet = `${name}-backend`;
+      const frontendNet = `${name}-frontend`;
+      usedNetworks.add(backendNet);
+      usedNetworks.add(frontendNet);
 
-      services += `    networks:
-      - ${netName}
-    depends_on:
-      ${name}-mem0:
-        condition: service_healthy
-
-  ${name}-qdrant:
+      services += `  ${name}-qdrant:
     image: qdrant/qdrant:v1.13.0
     expose:
       - "6333"
     volumes:
       - ./${name}/data/qdrant:/qdrant/storage
     networks:
-      - ${netName}
-    read_only: true
-    tmpfs:
-      - /tmp:size=50M
+      - ${backendNet}
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -149,15 +167,16 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
 
   ${name}-mem0:
     build: ./${name}/mem0
-    ports:
-      - "${ports.mem0}:8050"
+    expose:
+      - "8050"
     environment:
       GEMINI_API_KEY: \${GEMINI_API_KEY}
       MEM0_API_KEY: \${MEM0_API_KEY}
       QDRANT_HOST: ${name}-qdrant
       QDRANT_PORT: 6333
     networks:
-      - ${netName}
+      - ${frontendNet}
+      - ${backendNet}
     read_only: true
     tmpfs:
       - /tmp:size=100M
@@ -181,25 +200,97 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
     restart: unless-stopped
 
 `;
-    } else {
-      services += "\n";
     }
   }
 
-  for (const net of usedNetworks) {
-    networks += `  ${net}:\n    internal: true\n`;
+  // Nginx reverse proxy: public-net (port binding) + all proxy-nets (internal comms)
+  const nginxNetworks = [
+    "public-net",
+    ...names.map((n) => `${n}-proxy-net`),
+  ];
+  const portMappings = nginxProjects
+    .map((p) => `      - "${p.port}:${p.port}"`)
+    .join("\n");
+
+  services += `  nginx:
+    build: ./nginx
+    ports:
+${portMappings}
+    networks:
+${nginxNetworks.map((n) => `      - ${n}`).join("\n")}
+    read_only: true
+    tmpfs:
+      - /tmp:size=10M
+      - /var/cache/nginx:size=50M
+      - /run:size=10M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
+    depends_on:
+${nginxProjects.map((p) => `      ${p.containerName}:\n        condition: service_started`).join("\n")}
+    restart: unless-stopped
+
+`;
+
+  // Networks
+  let networks = "networks:\n";
+  networks += "  public-net:\n    # nginx port binding to host\n";
+  networks += "  egress-net:\n    # api-proxy outbound to Gemini API\n";
+  for (const name of names) {
+    networks += `  ${name}-proxy-net:\n    internal: true\n`;
+    const config = await readProjectConfig(reg.projects[name].path);
+    const processor = config?.processor ?? reg.projects[name].processor;
+    if (processor === "mem0") {
+      networks += `  ${name}-frontend:\n    internal: true\n`;
+      networks += `  ${name}-backend:\n    internal: true\n`;
+    }
   }
 
+  // Volumes
+  let volumes = "volumes:\n";
   for (const vol of usedVolumes) {
     volumes += `  ${vol}:\n`;
   }
 
   const compose = `# Generated by claw-farm cloud:compose
-# Deploy this with Coolify or any Docker Compose host
+# Production deployment with nginx reverse proxy + network isolation
+#
+# Architecture:
+#   browser → nginx (public-net) → openclaw (proxy-net, internal)
+#                                     → api-proxy (proxy-net + egress-net) → Gemini API
+#
+# openclaw has NO internet access — fully isolated on internal network
+# api-proxy is the only container with outbound internet (egress-net)
+# nginx is the only container with host port binding (public-net)
 services:
-${services}${usedNetworks.size > 0 ? networks + "\n" : ""}${usedVolumes.size > 0 ? volumes : ""}`;
+${services}${networks}
+${volumes}`;
 
   await Bun.write(resolved, compose);
+
+  // Write nginx config and Dockerfile
+  const nginxDir = join(process.cwd(), "nginx");
+  await mkdir(nginxDir, { recursive: true });
+  await Bun.write(
+    join(nginxDir, "nginx.conf"),
+    nginxProxyTemplate(nginxProjects),
+  );
+  await Bun.write(join(nginxDir, "Dockerfile"), nginxDockerfileTemplate());
+
   console.log(`\n✅ Cloud compose written to: ${outFile}`);
-  console.log(`   Includes ${names.length} project(s): ${names.join(", ")}\n`);
+  console.log(`   Includes ${names.length} project(s): ${names.join(", ")}`);
+  console.log(`   Generated nginx/ (reverse proxy + Dockerfile)`);
+  console.log(`\n   Network isolation:`);
+  console.log(`     nginx      → public-net (host ports) + proxy-nets`);
+  console.log(`     openclaw   → proxy-net only (internal, no internet)`);
+  console.log(`     api-proxy  → proxy-net + egress-net (outbound only)`);
+  console.log(``);
 }
