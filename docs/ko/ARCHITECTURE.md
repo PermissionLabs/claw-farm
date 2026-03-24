@@ -69,7 +69,7 @@ my-agent/
 │
 ├── openclaw/
 │   ├── config/
-│   │   ├── openclaw.json5          ← LLM 설정 (키 없음! 프록시 경유)
+│   │   ├── openclaw.json          ← LLM 설정 (키 없음! 프록시 경유)
 │   │   └── policy.yaml             ← 툴 접근 제한 (fs, http, shell)
 │   │
 │   ├── workspace/                  ← ★ 에이전트가 읽고 쓰는 공간
@@ -293,7 +293,7 @@ dog-agent/                             ← 프로젝트 루트
 │   ├── skills/                            커스텀 스킬 (모든 유저 동일)
 │   ├── CONTEXT.template.md                플레이스홀더: {{USER_ID}}, {{NAME}} 등
 │   └── config/
-│       ├── openclaw.json5
+│       ├── openclaw.json
 │       └── policy.yaml
 │
 └── instances/                         ← ★ 유저별 데이터 (gitignored)
@@ -336,7 +336,7 @@ $ claw-farm instances dog-agent
 ```yaml
 volumes:
   # 설정 파일 개별 마운트 (상위 디렉토리 쉐도잉 방지)
-  - ../../template/config/openclaw.json5:/...openclaw.json5:ro
+  - ../../template/config/openclaw.json:/...openclaw.json:ro
   - ../../template/config/policy.yaml:/...policy.yaml:ro
   # 공유 워크스페이스 파일
   - ../../template/SOUL.md:/...workspace/SOUL.md:ro
@@ -418,7 +418,7 @@ dog-agent (기존)                    dog-agent (claw-farm 등록 후)
 ├── .env                            ├── .env                  (그대로)
 ├── openclaw/                       ├── openclaw/
 │   ├── config/                     │   ├── config/
-│   │   └── openclaw.json5          │   │   ├── openclaw.json5 (그대로)
+│   │   └── openclaw.json          │   │   ├── openclaw.json (그대로)
 │   └── workspace/                  │   │   └── policy.yaml    ★ 추가
 │       ├── SOUL.md                 │   ├── workspace/         (그대로)
 │       ├── MEMORY.md               │   ├── raw/               ★ 추가

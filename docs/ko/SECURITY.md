@@ -39,7 +39,7 @@ OpenClaw ──(키 없음)──→ API Proxy ──(키 주입)──→ LLM A
 ### claw-farm 구현
 - `api-proxy/` 사이드카: FastAPI, 키 주입, 감사 로그
 - OpenClaw 컨테이너에 `GEMINI_API_KEY` 없음
-- `openclaw.json5`에서 `apiKey: "proxied"` 설정
+- `openclaw.json`에서 `apiKey: "proxied"` 설정
 
 ---
 

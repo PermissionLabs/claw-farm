@@ -7,7 +7,7 @@ import { ensureTemplateDirs, templateDir, instanceDir } from "../lib/instance.ts
 import { baseComposeTemplate } from "../templates/docker-compose.yml.ts";
 import { mem0ComposeTemplate } from "../templates/docker-compose.mem0.yml.ts";
 import { instanceComposeTemplate } from "../templates/docker-compose.instance.yml.ts";
-import { openclawConfigTemplate } from "../templates/openclaw.json5.ts";
+import { openclawConfigTemplate } from "../templates/openclaw.json.ts";
 import { policyTemplate } from "../templates/policy.yaml.ts";
 import {
   apiProxyServerTemplate,
@@ -46,13 +46,13 @@ export async function upgradeCommand(args: string[]): Promise<void> {
   await Bun.write(join(projectDir, "docker-compose.openclaw.yml"), composeContent);
   console.log("✓ Updated docker-compose.openclaw.yml");
 
-  const configPath = join(projectDir, "openclaw", "config", "openclaw.json5");
+  const configPath = join(projectDir, "openclaw", "config", "openclaw.json");
   try {
     const existing = await Bun.file(configPath).text();
     await Bun.write(configPath + ".backup", existing);
   } catch {}
   await Bun.write(configPath, openclawConfigTemplate(projectName, processor));
-  console.log("✓ Updated openclaw/config/openclaw.json5 (backup → .backup)");
+  console.log("✓ Updated openclaw/config/openclaw.json (backup → .backup)");
 
   await Bun.write(
     join(projectDir, "openclaw", "config", "policy.yaml"),
@@ -90,13 +90,13 @@ async function upgradeMultiInstance(
   const tmplDir = templateDir(projectDir);
   await ensureTemplateDirs(projectDir);
 
-  const configPath = join(tmplDir, "config", "openclaw.json5");
+  const configPath = join(tmplDir, "config", "openclaw.json");
   try {
     const existing = await Bun.file(configPath).text();
     await Bun.write(configPath + ".backup", existing);
   } catch {}
   await Bun.write(configPath, openclawConfigTemplate(projectName, processor));
-  console.log("✓ Updated template/config/openclaw.json5 (backup → .backup)");
+  console.log("✓ Updated template/config/openclaw.json (backup → .backup)");
 
   await Bun.write(
     join(tmplDir, "config", "policy.yaml"),
