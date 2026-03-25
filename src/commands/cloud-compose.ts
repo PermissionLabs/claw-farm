@@ -1,6 +1,6 @@
 import { resolve, relative, join } from "node:path";
 import { mkdir } from "node:fs/promises";
-import { loadRegistry } from "../lib/registry.ts";
+import { loadRegistry, findPositionalArg } from "../lib/registry.ts";
 import { readProjectConfig } from "../lib/config.ts";
 import { portRange } from "../lib/ports.ts";
 import {
@@ -18,7 +18,7 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
   }
 
   const outFile =
-    args.find((a) => !a.startsWith("-")) ?? "docker-compose.cloud.yml";
+    findPositionalArg(args) ?? "docker-compose.cloud.yml";
 
   // Output path validation — must stay within cwd
   const resolved = resolve(process.cwd(), outFile);
@@ -95,6 +95,13 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
 
     // OpenClaw: proxy-net (internal only) — NO internet, NO port binding
     // nginx proxies to it via proxy-net
+    const openclawNetworks = [proxyNet];
+    const openclawDeps = [`      ${name}-api-proxy:\n        condition: service_healthy`];
+    if (processor === "mem0") {
+      const frontendNet = `${name}-frontend`;
+      openclawNetworks.push(frontendNet);
+      openclawDeps.push(`      ${name}-mem0:\n        condition: service_healthy`);
+    }
     services += `  ${name}-openclaw:
     image: ghcr.io/openclaw/openclaw:latest
     expose:
@@ -107,7 +114,7 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
       OPENCLAW_SANDBOX: 1
       OPENCLAW_AUDIT_LOG: /home/node/.openclaw/logs/audit.jsonl
     networks:
-      - ${proxyNet}
+${openclawNetworks.map((n) => `      - ${n}`).join("\n")}
     read_only: true
     tmpfs:
       - /tmp:size=100M
@@ -124,8 +131,7 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
         reservations:
           memory: 256M
     depends_on:
-      ${name}-api-proxy:
-        condition: service_healthy
+${openclawDeps.join("\n")}
     restart: unless-stopped
 
 `;
