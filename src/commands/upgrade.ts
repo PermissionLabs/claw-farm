@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { resolveProjectName, type ProjectEntry } from "../lib/registry.ts";
 import { readProjectConfig, mergeOpenclawConfig } from "../lib/config.ts";
 import { ensureRawDirs } from "../lib/raw-collector.ts";
-import { ensureTemplateDirs, templateDir, instanceDir } from "../lib/instance.ts";
+import { ensureTemplateDirs, ensureInstanceDirs, templateDir, instanceDir } from "../lib/instance.ts";
 import { baseComposeTemplate } from "../templates/docker-compose.yml.ts";
 import { mem0ComposeTemplate } from "../templates/docker-compose.mem0.yml.ts";
 import { instanceComposeTemplate } from "../templates/docker-compose.instance.yml.ts";
@@ -131,17 +131,19 @@ async function upgradeMultiInstance(
   await Bun.write(join(projectDir, ".env.example"), envContent);
   console.log("✓ Updated .env.example");
 
-  // Regenerate per-instance compose files
+  // Regenerate per-instance compose files + ensure directories
   const instances = entry.instances ?? {};
   const instanceIds = Object.keys(instances);
   if (instanceIds.length > 0) {
     for (const userId of instanceIds) {
       const inst = instances[userId];
       const instDir = instanceDir(projectDir, userId);
+      // Ensure all required directories exist (memory/, logs/, raw/, etc.)
+      await ensureInstanceDirs(projectDir, userId);
       const composeContent = instanceComposeTemplate(projectName, userId, inst.port);
       await Bun.write(join(instDir, "docker-compose.openclaw.yml"), composeContent);
     }
-    console.log(`✓ Updated ${instanceIds.length} instance compose file(s)`);
+    console.log(`✓ Updated ${instanceIds.length} instance(s) (compose + directories)`);
   }
 
   console.log(`\n✅ ${projectName} upgraded!`);
