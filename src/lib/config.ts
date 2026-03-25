@@ -167,11 +167,19 @@ export function mergeOpenclawConfig(
       (existing.models ?? {}) as Record<string, unknown>,
       (template.models ?? {}) as Record<string, unknown>,
     );
-    // Merge env: template as base, user additions preserved
-    merged.env = deepMerge(
+    // Merge env: template as base, user additions preserved,
+    // but force-apply API key sentinels from template (security: must route through proxy)
+    const mergedEnv = deepMerge(
       (template.env ?? {}) as Record<string, unknown>,
       (existing.env ?? {}) as Record<string, unknown>,
     );
+    const templateEnv = (template.env ?? {}) as Record<string, unknown>;
+    for (const key of Object.keys(templateEnv)) {
+      if (key.endsWith("_API_KEY") || key.endsWith("_KEY")) {
+        mergedEnv[key] = templateEnv[key]; // force "proxied" sentinel
+      }
+    }
+    merged.env = mergedEnv;
     // Ensure every provider has a models array (OpenClaw requires it)
     const providers = (merged.models as Record<string, unknown>)?.providers as Record<string, Record<string, unknown>> | undefined;
     if (providers) {

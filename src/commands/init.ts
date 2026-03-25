@@ -18,8 +18,18 @@ import { mem0Processor } from "../processors/mem0.ts";
 import { ensureTemplateDirs, templateDir } from "../lib/instance.ts";
 import { userTemplateContent } from "../templates/USER.template.md.ts";
 
+/** Flags that consume the next arg as their value. */
+const FLAGS_WITH_VALUES = new Set(["--processor", "--llm", "--user", "--context"]);
+
 export async function initCommand(args: string[]): Promise<void> {
-  const name = args.find((a) => !a.startsWith("-"));
+  // Find positional name: skip flags and their values
+  let name: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    if (FLAGS_WITH_VALUES.has(args[i])) { i++; continue; } // skip flag + value
+    if (args[i].startsWith("-")) continue; // skip boolean flags
+    name = args[i];
+    break;
+  }
   if (!name) {
     console.error("Usage: claw-farm init <name> [--processor mem0] [--existing] [--multi]");
     process.exit(1);
@@ -33,9 +43,12 @@ export async function initCommand(args: string[]): Promise<void> {
 
   const VALID_PROCESSORS = ["builtin", "mem0"] as const;
   const processorIdx = args.indexOf("--processor");
-  const processor: "builtin" | "mem0" = processorIdx !== -1
-    ? (args[processorIdx + 1] as "builtin" | "mem0")
-    : "builtin";
+  const processorArg = processorIdx !== -1 ? args[processorIdx + 1] : undefined;
+  if (processorIdx !== -1 && (!processorArg || processorArg.startsWith("-"))) {
+    console.error(`Missing value for --processor. Must be one of: ${VALID_PROCESSORS.join(", ")}`);
+    process.exit(1);
+  }
+  const processor: "builtin" | "mem0" = (processorArg as "builtin" | "mem0") ?? "builtin";
   if (processorIdx !== -1 && !VALID_PROCESSORS.includes(processor)) {
     console.error(`Invalid processor: "${processor}". Must be one of: ${VALID_PROCESSORS.join(", ")}`);
     process.exit(1);

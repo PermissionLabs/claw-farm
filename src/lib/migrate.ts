@@ -68,11 +68,11 @@ export async function migrateToMulti(
 
   // Step 2: Migrate existing user data to instances/default/
   const defaultInstDir = join(projectDir, "instances", "default");
-  await mkdir(join(defaultInstDir, "openclaw", "workspace", "memory"), { recursive: true, mode: 0o700 });
-  await mkdir(join(defaultInstDir, "openclaw", "sessions"), { recursive: true, mode: 0o700 });
-  await mkdir(join(defaultInstDir, "openclaw", "logs"), { recursive: true, mode: 0o700 });
-  await mkdir(join(defaultInstDir, "raw", "workspace-snapshots"), { recursive: true, mode: 0o700 });
-  await mkdir(join(defaultInstDir, "processed"), { recursive: true, mode: 0o700 });
+  await mkdir(join(defaultInstDir, "openclaw", "workspace", "memory"), { recursive: true, mode: 0o755 });
+  await mkdir(join(defaultInstDir, "openclaw", "sessions"), { recursive: true, mode: 0o755 });
+  await mkdir(join(defaultInstDir, "openclaw", "logs"), { recursive: true, mode: 0o755 });
+  await mkdir(join(defaultInstDir, "raw", "workspace-snapshots"), { recursive: true, mode: 0o755 });
+  await mkdir(join(defaultInstDir, "processed"), { recursive: true, mode: 0o755 });
 
   // Copy config files to instance
   await copyIfExists(join(tmplDir, "config", "openclaw.json"), join(defaultInstDir, "openclaw", "openclaw.json"));
@@ -187,19 +187,12 @@ export async function migrateToMulti(
 }
 
 async function copyIfExists(src: string, dest: string): Promise<void> {
-  try {
-    const content = await Bun.file(src).text();
-    await Bun.write(dest, content);
-  } catch {
-    // Source doesn't exist — skip
-  }
+  const file = Bun.file(src);
+  if (!await file.exists()) return;
+  const content = await file.arrayBuffer();
+  await Bun.write(dest, content);
 }
 
 async function fileExists(path: string): Promise<boolean> {
-  try {
-    await Bun.file(path).text();
-    return true;
-  } catch {
-    return false;
-  }
+  return Bun.file(path).exists();
 }

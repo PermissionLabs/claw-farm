@@ -57,11 +57,9 @@ export async function spawn(options: {
     for (const configFile of ["openclaw.json", "policy.yaml"]) {
       const src = join(tmplDir, "config", configFile);
       const dest = join(instDir, "openclaw", configFile);
-      try {
-        const content = await Bun.file(src).text();
-        await Bun.write(dest, content);
-      } catch {
-        // Template config not found — skip
+      const file = Bun.file(src);
+      if (await file.exists()) {
+        await Bun.write(dest, await file.arrayBuffer());
       }
     }
 
@@ -165,10 +163,5 @@ export async function listInstances(
 }
 
 async function fileExists(path: string): Promise<boolean> {
-  try {
-    await Bun.file(path).text();
-    return true;
-  } catch {
-    return false;
-  }
+  return Bun.file(path).exists();
 }

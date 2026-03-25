@@ -16,12 +16,7 @@ import {
 } from "../templates/api-proxy.ts";
 
 async function fileExists(path: string): Promise<boolean> {
-  try {
-    await Bun.file(path).text();
-    return true;
-  } catch {
-    return false;
-  }
+  return Bun.file(path).exists();
 }
 
 async function dirExists(path: string): Promise<boolean> {
