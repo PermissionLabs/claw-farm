@@ -1,8 +1,8 @@
-import { SAFE_NAME_REGEX } from "../lib/registry.ts";
+import { SAFE_NAME_REGEX, findPositionalArg } from "../lib/registry.ts";
 import { despawn } from "../lib/api.ts";
 
 export async function despawnCommand(args: string[]): Promise<void> {
-  const projectArg = args.find((a) => !a.startsWith("-"));
+  const projectArg = findPositionalArg(args);
   if (!projectArg) {
     console.error("Usage: claw-farm despawn <project> --user <id> [--keep-data]");
     process.exit(1);

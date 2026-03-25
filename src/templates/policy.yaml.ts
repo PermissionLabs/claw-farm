@@ -14,7 +14,8 @@ tools:
       - /home/node/.openclaw/workspace/**
       - /home/node/.openclaw/sessions/**
     deny:
-      - /home/node/.openclaw/config/**   # no config tampering
+      - /home/node/.openclaw/openclaw.json  # no config tampering
+      - /home/node/.openclaw/policy.yaml     # no policy tampering
       - /etc/**
       - /proc/**
       - /sys/**

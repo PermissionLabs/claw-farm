@@ -52,9 +52,20 @@ export async function spawn(options: {
     // Create instance dirs
     const instDir = await ensureInstanceDirs(projectDir, userId);
 
+    // Copy config files from template to instance
+    const tmplDir = templateDir(projectDir);
+    for (const configFile of ["openclaw.json", "policy.yaml"]) {
+      const src = join(tmplDir, "config", configFile);
+      const dest = join(instDir, "openclaw", configFile);
+      const file = Bun.file(src);
+      if (await file.exists()) {
+        await Bun.write(dest, await file.arrayBuffer());
+      }
+    }
+
     // Fill USER.md — only write if file doesn't already exist (preserve on re-spawn with --keep-data)
     // OpenClaw auto-loads USER.md into the system prompt (CONTEXT.md is NOT auto-loaded)
-    const userPath = join(instDir, "USER.md");
+    const userPath = join(instDir, "openclaw", "workspace", "USER.md");
     if (!await fileExists(userPath)) {
       const tmplDir = templateDir(projectDir);
       let userContent: string;
@@ -74,7 +85,7 @@ export async function spawn(options: {
     }
 
     // Initial MEMORY.md — only write if file doesn't already exist
-    const memoryPath = join(instDir, "MEMORY.md");
+    const memoryPath = join(instDir, "openclaw", "workspace", "MEMORY.md");
     if (!await fileExists(memoryPath)) {
       await Bun.write(
         memoryPath,
@@ -152,10 +163,5 @@ export async function listInstances(
 }
 
 async function fileExists(path: string): Promise<boolean> {
-  try {
-    await Bun.file(path).text();
-    return true;
-  } catch {
-    return false;
-  }
+  return Bun.file(path).exists();
 }

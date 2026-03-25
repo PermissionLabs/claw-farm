@@ -50,19 +50,12 @@ services:
     ports:
       - "127.0.0.1:${port}:18789"
     volumes:
-      # Shared config files (read-only, mounted individually to avoid shadowing)
-      - ../../template/config/openclaw.json:/home/node/.openclaw/openclaw.json:ro
-      - ../../template/config/policy.yaml:/home/node/.openclaw/policy.yaml:ro
-      # Shared template files (read-only)
+      # Directory mount — OpenClaw needs atomic rename for config updates
+      - ./openclaw:/home/node/.openclaw
+      # Shared template files overlaid read-only
       - ../../template/SOUL.md:/home/node/.openclaw/workspace/SOUL.md:ro
       - ../../template/AGENTS.md:/home/node/.openclaw/workspace/AGENTS.md:ro
       - ../../template/skills:/home/node/.openclaw/workspace/skills:ro
-      # Per-instance files (read-write)
-      - ./USER.md:/home/node/.openclaw/workspace/USER.md
-      - ./MEMORY.md:/home/node/.openclaw/workspace/MEMORY.md
-      - ./memory:/home/node/.openclaw/workspace/memory
-      - ./raw/sessions:/home/node/.openclaw/sessions
-      - ./logs:/home/node/.openclaw/logs
     environment:
       OPENCLAW_API_PROXY: http://api-proxy:8080
       OPENCLAW_SANDBOX: 1
@@ -73,7 +66,6 @@ services:
     tmpfs:
       - /tmp:size=100M
       - /home/node/.cache:size=200M
-      - /home/node/.openclaw:size=50M,uid=1000,gid=1000
     security_opt:
       - no-new-privileges:true
     cap_drop:

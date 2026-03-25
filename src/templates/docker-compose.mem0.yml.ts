@@ -113,12 +113,8 @@ services:
     ports:
       - "127.0.0.1:${ports.openclaw}:18789"
     volumes:
-      # Config files mounted individually (OpenClaw needs to write temp files in .openclaw/)
-      - ./openclaw/config/openclaw.json:/home/node/.openclaw/openclaw.json:ro
-      - ./openclaw/config/policy.yaml:/home/node/.openclaw/policy.yaml:ro
-      - ./openclaw/workspace:/home/node/.openclaw/workspace
-      - ./openclaw/raw/sessions:/home/node/.openclaw/sessions
-      - openclaw-logs:/home/node/.openclaw/logs
+      # Directory mount — OpenClaw needs atomic rename for config updates
+      - ./openclaw:/home/node/.openclaw
     environment:
       # No GEMINI_API_KEY — agent cannot see it
       OPENCLAW_API_PROXY: http://api-proxy:8080
@@ -131,7 +127,6 @@ services:
     tmpfs:
       - /tmp:size=100M
       - /home/node/.cache:size=200M
-      - /home/node/.openclaw:size=50M,uid=1000,gid=1000
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -157,8 +152,5 @@ networks:
     internal: true    # openclaw ↔ mem0 only
   backend:
     internal: true    # mem0 ↔ qdrant only
-
-volumes:
-  openclaw-logs:
 `;
 }

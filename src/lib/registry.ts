@@ -8,6 +8,21 @@ const LOCK_PATH = join(REGISTRY_DIR, "registry.lock");
 /** Validates userId/projectName for filesystem and Docker safety */
 export const SAFE_NAME_REGEX = /^[a-z0-9][a-z0-9_-]{0,62}$/;
 
+/** Flags that consume the next arg as their value. */
+const FLAGS_WITH_VALUES = new Set(["--processor", "--llm", "--user", "--context"]);
+
+/** Find first positional arg, skipping flags and their values. */
+export function findPositionalArg(args: string[], exclude?: string[]): string | undefined {
+  const excludeSet = exclude ? new Set(exclude) : undefined;
+  for (let i = 0; i < args.length; i++) {
+    if (FLAGS_WITH_VALUES.has(args[i])) { i++; continue; }
+    if (args[i].startsWith("-")) continue;
+    if (excludeSet?.has(args[i])) continue;
+    return args[i];
+  }
+  return undefined;
+}
+
 export function validateName(value: string, label: string): void {
   if (!SAFE_NAME_REGEX.test(value)) {
     throw new Error(

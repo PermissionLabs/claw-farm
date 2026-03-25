@@ -5,27 +5,51 @@
 export function openclawConfigTemplate(
   name: string,
   processor: "builtin" | "mem0",
+  llm: "gemini" | "anthropic" | "openai-compat" = "gemini",
 ): string {
+  const providerConfigs: Record<string, { model: string; providerKey: string; baseUrl: string; envKey: string }> = {
+    gemini: {
+      model: "google/gemini-2.5-flash",
+      providerKey: "google",
+      baseUrl: "http://api-proxy:8080/v1beta",
+      envKey: "GEMINI_API_KEY",
+    },
+    anthropic: {
+      model: "anthropic/claude-sonnet-4-6",
+      providerKey: "anthropic",
+      baseUrl: "http://api-proxy:8080/v1",
+      envKey: "ANTHROPIC_API_KEY",
+    },
+    "openai-compat": {
+      model: "openai/gpt-4o",
+      providerKey: "openai",
+      baseUrl: "http://api-proxy:8080/v1",
+      envKey: "OPENAI_API_KEY",
+    },
+  };
+
+  const config = providerConfigs[llm];
+
   // Output valid JSON (no comments) so JSON.parse works in config merge
   return JSON.stringify(
     {
       agents: {
         defaults: {
           model: {
-            primary: "google/gemini-2.5-flash",
+            primary: config.model,
           },
         },
       },
       models: {
         providers: {
-          google: {
-            baseUrl: "http://api-proxy:8080/v1beta",
+          [config.providerKey]: {
+            baseUrl: config.baseUrl,
             models: [],
           },
         },
       },
       env: {
-        GEMINI_API_KEY: "proxied",
+        [config.envKey]: "proxied",
       },
       ...(processor === "mem0"
         ? {

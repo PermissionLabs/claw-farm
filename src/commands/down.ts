@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { resolveProjectName, loadRegistry, getInstance } from "../lib/registry.ts";
+import { resolveProjectName, loadRegistry, getInstance, findPositionalArg } from "../lib/registry.ts";
 import { runCompose } from "../lib/compose.ts";
 import { snapshotWorkspace } from "../lib/raw-collector.ts";
 import { instanceDir } from "../lib/instance.ts";
@@ -43,7 +43,7 @@ export async function downCommand(args: string[]): Promise<void> {
     return;
   }
 
-  const name = args.find((a) => !a.startsWith("-") && a !== userId);
+  const name = findPositionalArg(args);
   const { name: projectName, entry } = await resolveProjectName(name);
 
   if (entry.multiInstance && userId) {

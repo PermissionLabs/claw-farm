@@ -10,12 +10,11 @@ export const builtinProcessor: MemoryProcessor = {
   name: "builtin",
 
   async init(projectDir: string) {
-    await mkdir(join(projectDir, "openclaw", "processed"), { recursive: true });
+    await mkdir(join(projectDir, "processed"), { recursive: true });
   },
 
   async rebuild(projectDir: string) {
-    const rawSessions = join(projectDir, "openclaw", "raw", "sessions");
-    const processedDir = join(projectDir, "openclaw", "processed");
+    const processedDir = join(projectDir, "processed");
 
     // Clear processed directory
     const { rm } = await import("node:fs/promises");
@@ -24,7 +23,7 @@ export const builtinProcessor: MemoryProcessor = {
 
     // For builtin processor, MEMORY.md is managed directly by OpenClaw.
     // Rebuild simply creates a fresh MEMORY.md from the latest snapshot.
-    const snapshotsDir = join(projectDir, "openclaw", "raw", "workspace-snapshots");
+    const snapshotsDir = join(projectDir, "raw", "workspace-snapshots");
     try {
       const { readdir } = await import("node:fs/promises");
       const snapshots = await readdir(snapshotsDir);

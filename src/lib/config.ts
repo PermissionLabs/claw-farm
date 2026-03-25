@@ -167,7 +167,34 @@ export function mergeOpenclawConfig(
       (existing.models ?? {}) as Record<string, unknown>,
       (template.models ?? {}) as Record<string, unknown>,
     );
-    merged.env = template.env;
+    // Merge env: template as base, user additions preserved,
+    // but force-apply API key sentinels from template (security: must route through proxy)
+    const mergedEnv = deepMerge(
+      (template.env ?? {}) as Record<string, unknown>,
+      (existing.env ?? {}) as Record<string, unknown>,
+    );
+    const templateEnv = (template.env ?? {}) as Record<string, unknown>;
+    for (const key of Object.keys(templateEnv)) {
+      if (key.endsWith("_API_KEY")) {
+        mergedEnv[key] = templateEnv[key]; // force "proxied" sentinel
+      }
+    }
+    merged.env = mergedEnv;
+    // Ensure every provider has a models array (OpenClaw requires it)
+    const providers = (merged.models as Record<string, unknown>)?.providers as Record<string, Record<string, unknown>> | undefined;
+    if (providers) {
+      for (const key of Object.keys(providers)) {
+        if (providers[key] && !Array.isArray(providers[key].models)) {
+          providers[key].models = [];
+        }
+      }
+    }
+    // Force-apply security-critical gateway settings from template
+    const mergedGateway = (merged.gateway ?? {}) as Record<string, unknown>;
+    const templateGateway = (template.gateway ?? {}) as Record<string, unknown>;
+    if (templateGateway.controlUi) {
+      mergedGateway.controlUi = templateGateway.controlUi;
+    }
     // Remove root-level controlUi if present (OpenClaw reads gateway.controlUi)
     delete merged.controlUi;
     return JSON.stringify(merged, null, 2) + "\n";

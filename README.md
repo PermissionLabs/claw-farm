@@ -53,7 +53,7 @@ claw-farm init my-agent --existing --processor mem0
 
 This will:
 1. Register the project in the global registry (auto-assign port)
-2. Create `openclaw/raw/` directories (Layer 0 memory preservation)
+2. Create `openclaw/sessions/` directories (Layer 0 memory preservation)
 3. Generate `api-proxy/` sidecar (key isolation + PII filter)
 4. Generate `policy.yaml` (tool access restrictions)
 5. **NOT** overwrite your existing docker-compose.yml or openclaw config
@@ -76,6 +76,7 @@ This will:
 | `claw-farm instances <project>` | List all instances for a project |
 | `claw-farm list` | Show all projects + status |
 | `claw-farm upgrade [name]` | Re-generate claw-farm files with latest templates |
+| `claw-farm upgrade [name] --force-policy` | Upgrade and overwrite policy.yaml |
 | `claw-farm memory:rebuild [name]` | Rebuild memory from raw data |
 | `claw-farm cloud:compose [outfile]` | Generate cloud deployment compose |
 
@@ -140,8 +141,8 @@ See [docs/SECURITY.md](docs/SECURITY.md) for the full security hardening guide.
 
 ```
 Layer 0: Raw Storage (immutable, append-only, never deleted)
-  └─ raw/sessions/*.jsonl     ← OpenClaw session logs
-  └─ raw/workspace-snapshots/ ← MEMORY.md, SOUL.md snapshots
+  └─ openclaw/sessions/*.jsonl ← OpenClaw session logs
+  └─ raw/workspace-snapshots/  ← MEMORY.md, SOUL.md snapshots
 
 Layer 1: Processing (swappable, rebuildable)
   └─ processed/               ← Can be wiped and rebuilt anytime
@@ -159,19 +160,18 @@ my-agent/
     api_proxy.py                 #   Key injection + PII redaction + secret scanning
     Dockerfile
     requirements.txt
-  openclaw/
-    config/
-      openclaw.json             # LLM config (routes through proxy, no raw keys)
-      policy.yaml                # Tool access restrictions
+  openclaw/                        # Mounted as /home/node/.openclaw
+    openclaw.json                # LLM config (routes through proxy, no raw keys)
+    policy.yaml                  # Tool access restrictions
     workspace/
       SOUL.md                    # Agent personality
       MEMORY.md                  # Agent memory
       skills/                    # Custom skills
-    raw/                         # Layer 0: immutable
-      sessions/                  # Session logs (.jsonl)
-      workspace-snapshots/       # Periodic snapshots
-    processed/                   # Layer 1: rebuildable
-  logs/                          # Audit logs
+    sessions/                    # Layer 0: immutable session logs (.jsonl)
+    logs/                        # Agent audit logs
+  raw/workspace-snapshots/       # Periodic workspace snapshots
+  processed/                     # Layer 1: rebuildable
+  logs/                          # API proxy audit logs
 ```
 
 ## Cloud Deployment (Coolify + Hetzner)

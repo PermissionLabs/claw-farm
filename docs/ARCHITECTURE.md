@@ -69,23 +69,20 @@ my-agent/
 │   ├── Dockerfile
 │   └── requirements.txt
 │
-├── openclaw/
-│   ├── config/
-│   │   ├── openclaw.json          ← LLM config (no keys! routes through proxy)
-│   │   └── policy.yaml             ← Tool access restrictions (fs, http, shell)
-│   │
+├── openclaw/                       ← Mounted as /home/node/.openclaw
+│   ├── openclaw.json              ← LLM config (no keys! routes through proxy)
+│   ├── policy.yaml                 ← Tool access restrictions (fs, http, shell)
 │   ├── workspace/                  ← ★ Agent read/write space
 │   │   ├── SOUL.md                     Personality & behavior rules
 │   │   ├── MEMORY.md                   Accumulated via conversations
 │   │   └── skills/                     Custom skills
-│   │
-│   ├── raw/                        ← ★ Layer 0: NEVER delete
-│   │   ├── sessions/                   Session log originals (.jsonl)
-│   │   └── workspace-snapshots/        Auto-snapshot on up/down
-│   │
-│   └── processed/                  ← Layer 1: disposable, rebuildable
+│   ├── sessions/                   ← ★ Layer 0: NEVER delete (.jsonl logs)
+│   └── logs/                       ← Agent audit logs
 │
-├── logs/                           ← Audit logs
+├── raw/                            ← Workspace snapshots (auto-snapshot on up/down)
+│   └── workspace-snapshots/
+├── processed/                      ← Layer 1: disposable, rebuildable
+├── logs/                           ← API proxy audit logs
 │
 ├── nginx/                          ← (cloud:compose generates)
 │   └── nginx.conf                     Reverse proxy for cloud deploy
@@ -260,7 +257,7 @@ User: "My dog's phone is 010-1234-5678 and SSN 880101-1234567..."
 │  4. Receives clean LLM response                             │
 │  5. Updates MEMORY.md: "Poppy's owner has contact info"     │
 │  6. Responds to user                                        │
-│  7. Session log → raw/sessions/ (auto-saved)                │
+│  7. Session log → sessions/ (auto-saved)                    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -336,18 +333,21 @@ dog-agent/                             ← Project root
 └── instances/                         ← ★ Per-user data (gitignored)
     ├── alice/
     │   ├── docker-compose.openclaw.yml    Per-instance compose
-    │   ├── USER.md                     "Dog: Poppy, 3yo Maltese"
-    │   ├── MEMORY.md                      Alice's conversation memory
-    │   ├── raw/sessions/
+    │   ├── openclaw/                      Mounted as /home/node/.openclaw
+    │   │   ├── openclaw.json                 Copied from template/config/
+    │   │   ├── policy.yaml                   Copied from template/config/
+    │   │   ├── workspace/
+    │   │   │   ├── USER.md                "Dog: Poppy, 3yo Maltese"
+    │   │   │   ├── MEMORY.md                 Alice's conversation memory
+    │   │   │   └── memory/
+    │   │   ├── sessions/
+    │   │   └── logs/
     │   ├── raw/workspace-snapshots/
-    │   ├── processed/
-    │   └── logs/
+    │   └── processed/
     │
     └── bob/
         ├── docker-compose.openclaw.yml
-        ├── USER.md                     "Dog: Max, 5yo Golden Retriever"
-        ├── MEMORY.md                      Bob's conversation memory
-        ├── raw/sessions/
+        ├── openclaw/                      Same structure as alice
         └── ...
 ```
 
@@ -369,19 +369,16 @@ $ claw-farm instances dog-agent
 └──────────────────┴─────────┴───────────┘
 ```
 
-Shared template files are mounted read-only into each instance:
+Each instance has its own `openclaw/` directory mounted as `/home/node/.openclaw`,
+with shared template files overlaid read-only:
 ```yaml
 volumes:
-  # Config files mounted individually (avoids parent-dir shadowing)
-  - ../../template/config/openclaw.json:/...openclaw.json:ro
-  - ../../template/config/policy.yaml:/...policy.yaml:ro
-  # Shared workspace files
+  # Directory mount (writable — OpenClaw needs atomic rename for config)
+  - ./openclaw:/home/node/.openclaw
+  # Shared template files overlaid read-only
   - ../../template/SOUL.md:/...workspace/SOUL.md:ro
   - ../../template/AGENTS.md:/...workspace/AGENTS.md:ro
   - ../../template/skills:/...workspace/skills:ro
-  # Per-instance data
-  - ./USER.md:/...workspace/USER.md       # per-user
-  - ./MEMORY.md:/...workspace/MEMORY.md         # per-user
 ```
 
 ### Multi-Instance Commands
@@ -454,17 +451,16 @@ my-project (before)                 my-project (after claw-farm init --existing)
 ├── docker-compose.yml  ← untouched ├── docker-compose.yml    (untouched)
 ├── .env                            ├── .env                  (untouched)
 ├── openclaw/                       ├── openclaw/
-│   ├── config/                     │   ├── config/
-│   │   └── openclaw.json          │   │   ├── openclaw.json (untouched)
-│   └── workspace/                  │   │   └── policy.yaml    ★ added
-│       ├── SOUL.md                 │   ├── workspace/         (untouched)
-│       ├── MEMORY.md               │   ├── raw/               ★ added
-│       └── skills/                 │   │   ├── sessions/
-├── mem0/                           │   │   └── workspace-snapshots/
-│   ├── Dockerfile                  │   └── processed/         ★ added
-│   └── mem0_server.py              ├── mem0/                  (untouched)
-└── data/qdrant/                    ├── api-proxy/             ★ added
-                                    │   ├── api_proxy.py
+│   ├── config/                     │   ├── openclaw.json     ★ added (proxy routing)
+│   │   └── openclaw.json          │   ├── policy.yaml        ★ added
+│   └── workspace/                  │   ├── workspace/         (untouched)
+│       ├── SOUL.md                 │   ├── sessions/          ★ added
+│       ├── MEMORY.md               │   └── logs/              ★ added
+│       └── skills/                 ├── raw/workspace-snapshots/ ★ added
+├── mem0/                           ├── processed/             ★ added
+│   ├── Dockerfile                  ├── mem0/                  (untouched)
+│   └── mem0_server.py              ├── api-proxy/             ★ added
+└── data/qdrant/                    │   ├── api_proxy.py
                                     │   ├── Dockerfile
                                     │   └── requirements.txt
                                     ├── logs/                  ★ added

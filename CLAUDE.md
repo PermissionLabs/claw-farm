@@ -70,6 +70,7 @@ bun run src/index.ts instances <project>           # List all instances
 bun run src/index.ts list                          # Show all projects
 bun run src/index.ts memory:rebuild [name]         # Rebuild Layer 1 from raw
 bun run src/index.ts upgrade [name]                 # Re-generate templates to latest
+bun run src/index.ts upgrade [name] --force-policy  # Upgrade + overwrite policy.yaml
 bun run src/index.ts cloud:compose [outfile]       # Generate cloud compose
 ```
 
@@ -128,9 +129,9 @@ Look for `.claw-farm.json` in the project root:
 | `openclaw/workspace/SOUL.md` | Agent personality & behavior rules | Yes — this defines who you are |
 | `openclaw/workspace/MEMORY.md` | Accumulated agent memory | Yes — OpenClaw updates this automatically |
 | `openclaw/workspace/skills/` | Custom skills directory | Yes — add new skills here |
-| `openclaw/config/openclaw.json` | LLM model & plugin config | Only if user asks |
-| `openclaw/config/policy.yaml` | Tool access restrictions | Only if user asks |
-| `openclaw/raw/` | Immutable session logs | **NEVER delete or modify** |
+| `openclaw/openclaw.json` | LLM model & plugin config | Only if user asks |
+| `openclaw/policy.yaml` | Tool access restrictions | Only if user asks |
+| `openclaw/sessions/` | Immutable session logs | **NEVER delete or modify** |
 | `api-proxy/api_proxy.py` | Security proxy | Only if user asks |
 | `docker-compose.openclaw.yml` | Container orchestration | Only if user asks |
 
@@ -142,15 +143,15 @@ Look for `.claw-farm.json` in the project root:
 | `template/AGENTS.md` | Shared behavior rules | Yes — shared across all instances |
 | `template/skills/` | Shared custom skills | Yes — shared across all instances |
 | `template/USER.template.md` | Per-user context template | Yes — defines placeholders |
-| `instances/<user>/USER.md` | Per-user context (filled) | Yes — user-specific info |
-| `instances/<user>/MEMORY.md` | Per-user memory | Yes — isolated per user |
-| `instances/<user>/raw/` | Per-user immutable logs | **NEVER delete or modify** |
+| `instances/<user>/openclaw/workspace/USER.md` | Per-user context (filled) | Yes — user-specific info |
+| `instances/<user>/openclaw/workspace/MEMORY.md` | Per-user memory | Yes — isolated per user |
+| `instances/<user>/openclaw/sessions/` | Per-user immutable logs | **NEVER delete or modify** |
 
 ### Security rules
 1. **API keys are NOT in your environment.** They're in the api-proxy container. Don't look for them.
 2. **Outbound requests are PII-filtered.** Sensitive patterns (SSN, phone numbers, etc.) are automatically redacted.
 3. **LLM responses are secret-scanned.** API keys or tokens in responses are stripped before reaching you.
-4. **raw/ is sacred.** Layer 0 data is append-only and never deleted.
+4. **sessions/ is sacred.** Layer 0 data is append-only and never deleted.
 5. **processed/ is disposable.** Layer 1 can be wiped and rebuilt with `claw-farm memory:rebuild`.
 
 ### Register / start / stop
