@@ -16,7 +16,7 @@ import {
 import { builtinProcessor } from "../processors/builtin.ts";
 import { mem0Processor } from "../processors/mem0.ts";
 import { ensureTemplateDirs, templateDir } from "../lib/instance.ts";
-import { contextTemplateContent } from "../templates/CONTEXT.template.md.ts";
+import { userTemplateContent } from "../templates/USER.template.md.ts";
 
 export async function initCommand(args: string[]): Promise<void> {
   const name = args.find((a) => !a.startsWith("-"));
@@ -291,8 +291,8 @@ async function initMulti(
   await Bun.write(join(tmplDir, "AGENTS.md"), `# ${name} — Agents\n\n> Shared behavior rules for all instances.\n`);
   console.log("✓ Generated template/AGENTS.md");
 
-  await Bun.write(join(tmplDir, "CONTEXT.template.md"), contextTemplateContent(name));
-  console.log("✓ Generated template/CONTEXT.template.md");
+  await Bun.write(join(tmplDir, "USER.template.md"), userTemplateContent(name));
+  console.log("✓ Generated template/USER.template.md");
 
   // Write config files
   await Bun.write(
@@ -348,7 +348,7 @@ async function initMulti(
   console.log(`\n✅ Multi-instance project "${name}" initialized!`);
   console.log(`\nNext steps:`);
   console.log(`  1. Copy .env.example to .env and fill in your API keys`);
-  console.log(`  2. Customize template/SOUL.md and template/CONTEXT.template.md`);
+  console.log(`  2. Customize template/SOUL.md and template/USER.template.md`);
   console.log(`  3. Spawn an instance: claw-farm spawn ${name} --user <user-id>`);
   console.log(`  4. Open: http://localhost:<assigned-port>\n`);
 }

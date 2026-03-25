@@ -1,13 +1,14 @@
 /**
- * Default CONTEXT.template.md — per-instance context template.
+ * Default USER.template.md — per-instance user profile template.
  * Placeholders like {{KEY}} are filled at spawn time with --context k=v pairs.
+ * OpenClaw auto-loads USER.md into the system prompt.
  */
-export function contextTemplateContent(name: string): string {
+export function userTemplateContent(name: string): string {
   const safeName = name.replace(/[^a-zA-Z0-9_-]/g, "");
-  return `# ${safeName} — Context
+  return `# ${safeName} — User Profile
 
-> This file contains fixed context for this instance.
-> The agent automatically loads this information at the start of every conversation.
+> OpenClaw automatically loads this file into the system prompt.
+> Customize it with user-specific information.
 
 ## User Info
 - User ID: {{USER_ID}}
@@ -18,10 +19,10 @@ export function contextTemplateContent(name: string): string {
 }
 
 /**
- * Fill a CONTEXT.template.md with provided key-value context.
+ * Fill a USER.template.md with provided key-value context.
  * Unfilled placeholders are replaced with [not provided].
  */
-export function fillContext(
+export function fillUserTemplate(
   template: string,
   userId: string,
   context?: Record<string, string>,

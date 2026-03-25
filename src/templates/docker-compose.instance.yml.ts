@@ -58,7 +58,7 @@ services:
       - ../../template/AGENTS.md:/home/node/.openclaw/workspace/AGENTS.md:ro
       - ../../template/skills:/home/node/.openclaw/workspace/skills:ro
       # Per-instance files (read-write)
-      - ./CONTEXT.md:/home/node/.openclaw/workspace/CONTEXT.md
+      - ./USER.md:/home/node/.openclaw/workspace/USER.md
       - ./MEMORY.md:/home/node/.openclaw/workspace/MEMORY.md
       - ./raw/sessions:/home/node/.openclaw/sessions
       - ./logs:/home/node/.openclaw/logs

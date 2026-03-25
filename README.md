@@ -87,7 +87,7 @@ mkdir dog-agent && cd dog-agent
 claw-farm init dog-agent --multi
 
 # Customize template/SOUL.md (shared personality) and
-# template/CONTEXT.template.md (per-user placeholders)
+# template/USER.template.md (per-user placeholders)
 
 # Spawn instances for each user
 claw-farm spawn dog-agent --user alice --context name=Poppy breed=Maltese age=3
@@ -100,7 +100,7 @@ claw-farm instances dog-agent
 # import { spawn } from "@permissionlabs/claw-farm"
 ```
 
-Each user gets: isolated MEMORY.md, their own CONTEXT.md, own port.
+Each user gets: isolated MEMORY.md, their own USER.md, own port.
 Shared across users: SOUL.md, AGENTS.md, skills/, config/.
 
 ## Security Architecture

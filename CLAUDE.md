@@ -43,7 +43,7 @@ claw-farm CLI
   ├── commands/        # init, up, down, list, spawn, despawn, instances, upgrade, memory:rebuild, cloud:compose
   ├── lib/             # registry, compose, config, ports, raw-collector, instance, migrate, api
   ├── processors/      # interface, builtin (MEMORY.md), mem0 (Qdrant)
-  └── templates/       # docker-compose, docker-compose.instance, docker-compose.mem0, CONTEXT.template, openclaw.json, SOUL.md, policy.yaml, api-proxy, nginx-proxy
+  └── templates/       # docker-compose, docker-compose.instance, docker-compose.mem0, USER.template, openclaw.json, SOUL.md, policy.yaml, api-proxy, nginx-proxy
 ```
 
 **Multi-Instance:** `init --multi` creates `template/` + `instances/` structure. `spawn --user` creates per-user isolated instances with shared template files.
@@ -140,8 +140,8 @@ Look for `.claw-farm.json` in the project root:
 | `template/SOUL.md` | Shared agent personality | Yes — shared across all instances |
 | `template/AGENTS.md` | Shared behavior rules | Yes — shared across all instances |
 | `template/skills/` | Shared custom skills | Yes — shared across all instances |
-| `template/CONTEXT.template.md` | Per-user context template | Yes — defines placeholders |
-| `instances/<user>/CONTEXT.md` | Per-user context (filled) | Yes — user-specific info |
+| `template/USER.template.md` | Per-user context template | Yes — defines placeholders |
+| `instances/<user>/USER.md` | Per-user context (filled) | Yes — user-specific info |
 | `instances/<user>/MEMORY.md` | Per-user memory | Yes — isolated per user |
 | `instances/<user>/raw/` | Per-user immutable logs | **NEVER delete or modify** |
 

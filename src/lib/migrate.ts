@@ -3,7 +3,7 @@ import { mkdir, cp, readdir } from "node:fs/promises";
 import { loadRegistry, saveRegistry } from "./registry.ts";
 import { readProjectConfig, writeProjectConfig } from "./config.ts";
 import { ensureTemplateDirs, templateDir } from "./instance.ts";
-import { contextTemplateContent } from "../templates/CONTEXT.template.md.ts";
+import { userTemplateContent } from "../templates/USER.template.md.ts";
 
 /**
  * Migrate a single-instance project to multi-instance mode.
@@ -59,10 +59,10 @@ export async function migrateToMulti(
     // No config files
   }
 
-  // Create CONTEXT.template.md
+  // Create USER.template.md
   await Bun.write(
-    join(tmplDir, "CONTEXT.template.md"),
-    contextTemplateContent(projectName),
+    join(tmplDir, "USER.template.md"),
+    userTemplateContent(projectName),
   );
 
   // Step 2: Migrate existing user data to instances/default/
@@ -75,11 +75,11 @@ export async function migrateToMulti(
   // Move MEMORY.md to default instance
   await copyIfExists(join(wsDir, "MEMORY.md"), join(defaultInstDir, "MEMORY.md"));
 
-  // Create a CONTEXT.md for the default instance
-  if (!await fileExists(join(defaultInstDir, "CONTEXT.md"))) {
+  // Create a USER.md for the default instance
+  if (!await fileExists(join(defaultInstDir, "USER.md"))) {
     await Bun.write(
-      join(defaultInstDir, "CONTEXT.md"),
-      `# ${projectName} — Context (default)\n\n- User ID: default\n- Migrated from single-instance mode\n`,
+      join(defaultInstDir, "USER.md"),
+      `# ${projectName} — User Profile (default)\n\n- User ID: default\n- Migrated from single-instance mode\n`,
     );
   }
 
