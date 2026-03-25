@@ -326,7 +326,7 @@ dog-agent/                             ← 프로젝트 루트
 │   ├── SOUL.md                            에이전트 성격 (모든 유저 동일)
 │   ├── AGENTS.md                          행동 규칙 (모든 유저 동일)
 │   ├── skills/                            커스텀 스킬 (모든 유저 동일)
-│   ├── CONTEXT.template.md                플레이스홀더: {{USER_ID}}, {{NAME}} 등
+│   ├── USER.template.md                플레이스홀더: {{USER_ID}}, {{NAME}} 등
 │   └── config/
 │       ├── openclaw.json
 │       └── policy.yaml
@@ -334,7 +334,7 @@ dog-agent/                             ← 프로젝트 루트
 └── instances/                         ← ★ 유저별 데이터 (gitignored)
     ├── alice/
     │   ├── docker-compose.openclaw.yml    인스턴스별 compose
-    │   ├── CONTEXT.md                     "강아지: 뽀삐, 3살 말티즈"
+    │   ├── USER.md                     "강아지: 뽀삐, 3살 말티즈"
     │   ├── MEMORY.md                      Alice의 대화 기억
     │   ├── raw/sessions/
     │   ├── raw/workspace-snapshots/
@@ -343,7 +343,7 @@ dog-agent/                             ← 프로젝트 루트
     │
     └── bob/
         ├── docker-compose.openclaw.yml
-        ├── CONTEXT.md                     "강아지: 맥스, 5살 골든리트리버"
+        ├── USER.md                     "강아지: 맥스, 5살 골든리트리버"
         ├── MEMORY.md                      Bob의 대화 기억
         ├── raw/sessions/
         └── ...
@@ -351,7 +351,7 @@ dog-agent/                             ← 프로젝트 루트
 
 **핵심 설계:**
 - `SOUL.md` (공유): "나는 강아지 전문 AI" — 모든 유저 동일
-- `CONTEXT.md` (유저별): "강아지: 뽀삐, 3살 말티즈, 닭고기 알러지" — 항상 로드
+- `USER.md` (유저별): "강아지: 뽀삐, 3살 말티즈, 닭고기 알러지" — 항상 로드
 - `MEMORY.md` (유저별): 축적된 대화 기억 — 유저별 격리
 - `template/` → git 추적. `instances/` → gitignored (유저 데이터는 로컬 유지)
 
@@ -378,7 +378,7 @@ volumes:
   - ../../template/AGENTS.md:/...workspace/AGENTS.md:ro
   - ../../template/skills:/...workspace/skills:ro
   # 유저별 데이터
-  - ./CONTEXT.md:/...workspace/CONTEXT.md       # 유저별
+  - ./USER.md:/...workspace/USER.md       # 유저별
   - ./MEMORY.md:/...workspace/MEMORY.md         # 유저별
 ```
 

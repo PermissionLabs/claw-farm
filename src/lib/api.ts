@@ -18,7 +18,7 @@ import {
 import { readProjectConfig } from "./config.ts";
 import { ensureInstanceDirs, instanceDir, templateDir } from "./instance.ts";
 import { instanceComposeTemplate } from "../templates/docker-compose.instance.yml.ts";
-import { fillContext } from "../templates/CONTEXT.template.md.ts";
+import { fillUserTemplate } from "../templates/USER.template.md.ts";
 import { runCompose } from "./compose.ts";
 import { migrateToMulti } from "./migrate.ts";
 
@@ -52,24 +52,25 @@ export async function spawn(options: {
     // Create instance dirs
     const instDir = await ensureInstanceDirs(projectDir, userId);
 
-    // Fill CONTEXT.md — only write if file doesn't already exist (preserve on re-spawn with --keep-data)
-    const contextPath = join(instDir, "CONTEXT.md");
-    if (!await fileExists(contextPath)) {
+    // Fill USER.md — only write if file doesn't already exist (preserve on re-spawn with --keep-data)
+    // OpenClaw auto-loads USER.md into the system prompt (CONTEXT.md is NOT auto-loaded)
+    const userPath = join(instDir, "USER.md");
+    if (!await fileExists(userPath)) {
       const tmplDir = templateDir(projectDir);
-      let contextContent: string;
+      let userContent: string;
       try {
-        const template = await Bun.file(join(tmplDir, "CONTEXT.template.md")).text();
-        contextContent = fillContext(template, userId, context);
+        const template = await Bun.file(join(tmplDir, "USER.template.md")).text();
+        userContent = fillUserTemplate(template, userId, context);
       } catch {
-        contextContent = `# ${projectName} — Context\n\n- User ID: ${userId}\n`;
+        userContent = `# ${projectName} — User Profile\n\n- User ID: ${userId}\n`;
         if (context && Object.keys(context).length > 0) {
-          contextContent += "\n## Details\n";
+          userContent += "\n## Details\n";
           for (const [k, v] of Object.entries(context)) {
-            contextContent += `- ${k}: ${v}\n`;
+            userContent += `- ${k}: ${v}\n`;
           }
         }
       }
-      await Bun.write(contextPath, contextContent);
+      await Bun.write(userPath, userContent);
     }
 
     // Initial MEMORY.md — only write if file doesn't already exist

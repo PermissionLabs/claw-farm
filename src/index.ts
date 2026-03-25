@@ -34,7 +34,7 @@ Usage:
   claw-farm cloud:compose [outfile]      Generate unified cloud deploy compose
 
 Spawn options:
-  --context k=v k2=v2   Fill CONTEXT.template.md placeholders (space-separated)
+  --context k=v k2=v2   Fill USER.template.md placeholders (space-separated)
   --no-start             Create instance without starting containers
 
 Despawn options:

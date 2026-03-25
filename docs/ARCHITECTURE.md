@@ -328,7 +328,7 @@ dog-agent/                             ← Project root
 │   ├── SOUL.md                            Agent personality (same for all users)
 │   ├── AGENTS.md                          Behavior rules (same for all users)
 │   ├── skills/                            Custom skills (same for all users)
-│   ├── CONTEXT.template.md                Placeholders: {{USER_ID}}, {{NAME}}, etc.
+│   ├── USER.template.md                Placeholders: {{USER_ID}}, {{NAME}}, etc.
 │   └── config/
 │       ├── openclaw.json
 │       └── policy.yaml
@@ -336,7 +336,7 @@ dog-agent/                             ← Project root
 └── instances/                         ← ★ Per-user data (gitignored)
     ├── alice/
     │   ├── docker-compose.openclaw.yml    Per-instance compose
-    │   ├── CONTEXT.md                     "Dog: Poppy, 3yo Maltese"
+    │   ├── USER.md                     "Dog: Poppy, 3yo Maltese"
     │   ├── MEMORY.md                      Alice's conversation memory
     │   ├── raw/sessions/
     │   ├── raw/workspace-snapshots/
@@ -345,7 +345,7 @@ dog-agent/                             ← Project root
     │
     └── bob/
         ├── docker-compose.openclaw.yml
-        ├── CONTEXT.md                     "Dog: Max, 5yo Golden Retriever"
+        ├── USER.md                     "Dog: Max, 5yo Golden Retriever"
         ├── MEMORY.md                      Bob's conversation memory
         ├── raw/sessions/
         └── ...
@@ -353,7 +353,7 @@ dog-agent/                             ← Project root
 
 **Key design:**
 - `SOUL.md` (shared): "I am a dog specialist AI" — same for all users
-- `CONTEXT.md` (per-user): "Dog: Poppy, 3yo Maltese, chicken allergy" — always loaded
+- `USER.md` (per-user): "Dog: Poppy, 3yo Maltese, chicken allergy" — always loaded
 - `MEMORY.md` (per-user): Accumulated conversation memory — isolated per user
 - `template/` → git tracked. `instances/` → gitignored (user data stays local)
 
@@ -380,7 +380,7 @@ volumes:
   - ../../template/AGENTS.md:/...workspace/AGENTS.md:ro
   - ../../template/skills:/...workspace/skills:ro
   # Per-instance data
-  - ./CONTEXT.md:/...workspace/CONTEXT.md       # per-user
+  - ./USER.md:/...workspace/USER.md       # per-user
   - ./MEMORY.md:/...workspace/MEMORY.md         # per-user
 ```
 
