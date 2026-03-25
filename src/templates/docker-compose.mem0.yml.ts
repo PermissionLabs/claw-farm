@@ -19,7 +19,11 @@ services:
     expose:
       - "8080"
     environment:
-      GEMINI_API_KEY: \${GEMINI_API_KEY}
+      LLM_PROVIDER: \${LLM_PROVIDER:-gemini}
+      GEMINI_API_KEY: \${GEMINI_API_KEY:-}
+      ANTHROPIC_API_KEY: \${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: \${OPENAI_API_KEY:-}
+      OPENAI_COMPAT_BASE_URL: \${OPENAI_COMPAT_BASE_URL:-}
       AUDIT_LOG_PATH: /logs/api-proxy-audit.jsonl
       MAX_PROMPT_SIZE_MB: 5
       PII_MODE: redact  # redact | block | warn
@@ -127,8 +131,6 @@ services:
     tmpfs:
       - /tmp:size=100M
       - /home/node/.cache:size=200M
-      - /home/node/.openclaw:size=50M,uid=1000,gid=1000
-      - /home/node/.openclaw/workspace:size=10M,uid=1000,gid=1000
     security_opt:
       - no-new-privileges:true
     cap_drop:

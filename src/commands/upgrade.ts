@@ -75,8 +75,8 @@ export async function upgradeCommand(args: string[]): Promise<void> {
   console.log("✓ Updated api-proxy/ (key isolation + PII filter + secret scan)");
 
   const envContent = processor === "mem0"
-    ? "GEMINI_API_KEY=\n# WARNING: Leave empty only for local development. Set a key for cloud deployments.\nMEM0_API_KEY=\n"
-    : "GEMINI_API_KEY=\n";
+    ? "# LLM Provider: gemini (default) | anthropic | openai-compat\n# LLM_PROVIDER=gemini\n\nGEMINI_API_KEY=\n# ANTHROPIC_API_KEY=\n# OPENAI_API_KEY=\n# OPENAI_COMPAT_BASE_URL=\n\nMEM0_API_KEY=\n"
+    : "# LLM Provider: gemini (default) | anthropic | openai-compat\n# LLM_PROVIDER=gemini\n\nGEMINI_API_KEY=\n# ANTHROPIC_API_KEY=\n# OPENAI_API_KEY=\n# OPENAI_COMPAT_BASE_URL=\n";
   await Bun.write(join(projectDir, ".env.example"), envContent);
   console.log("✓ Updated .env.example");
 
@@ -126,8 +126,8 @@ async function upgradeMultiInstance(
   console.log("✓ Updated api-proxy/ (key isolation + PII filter + secret scan)");
 
   const envContent = processor === "mem0"
-    ? "GEMINI_API_KEY=\nMEM0_API_KEY=\n"
-    : "GEMINI_API_KEY=\n";
+    ? "# LLM Provider: gemini (default) | anthropic | openai-compat\n# LLM_PROVIDER=gemini\n\nGEMINI_API_KEY=\n# ANTHROPIC_API_KEY=\n# OPENAI_API_KEY=\n# OPENAI_COMPAT_BASE_URL=\n\nMEM0_API_KEY=\n"
+    : "# LLM Provider: gemini (default) | anthropic | openai-compat\n# LLM_PROVIDER=gemini\n\nGEMINI_API_KEY=\n# ANTHROPIC_API_KEY=\n# OPENAI_API_KEY=\n# OPENAI_COMPAT_BASE_URL=\n";
   await Bun.write(join(projectDir, ".env.example"), envContent);
   console.log("✓ Updated .env.example");
 

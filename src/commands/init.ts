@@ -217,8 +217,8 @@ async function registerExisting(
     console.log("✓ .env.example already exists — skipped");
   } catch {
     const envContent = processor === "mem0"
-      ? "GEMINI_API_KEY=\nMEM0_API_KEY=\n"
-      : "GEMINI_API_KEY=\n";
+      ? "# LLM Provider: gemini (default) | anthropic | openai-compat\n# LLM_PROVIDER=gemini\n\nGEMINI_API_KEY=\n# ANTHROPIC_API_KEY=\n# OPENAI_API_KEY=\n# OPENAI_COMPAT_BASE_URL=\n\nMEM0_API_KEY=\n"
+      : "# LLM Provider: gemini (default) | anthropic | openai-compat\n# LLM_PROVIDER=gemini\n\nGEMINI_API_KEY=\n# ANTHROPIC_API_KEY=\n# OPENAI_API_KEY=\n# OPENAI_COMPAT_BASE_URL=\n";
     await Bun.write(envExamplePath, envContent);
     console.log("✓ Generated .env.example");
   }
