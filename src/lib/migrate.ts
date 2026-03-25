@@ -47,16 +47,17 @@ export async function migrateToMulti(
     // No skills directory
   }
 
-  // Copy config/ → template/config/
-  const configSrcDir = join(projectDir, "openclaw", "config");
-  try {
-    const files = await readdir(configSrcDir);
-    await mkdir(join(tmplDir, "config"), { recursive: true });
-    for (const file of files) {
-      await cp(join(configSrcDir, file), join(tmplDir, "config", file), { recursive: true });
-    }
-  } catch {
-    // No config files
+  // Copy config files → template/config/ (check both old and new layout)
+  await mkdir(join(tmplDir, "config"), { recursive: true });
+  // New layout: openclaw/openclaw.json
+  await copyIfExists(join(projectDir, "openclaw", "openclaw.json"), join(tmplDir, "config", "openclaw.json"));
+  await copyIfExists(join(projectDir, "openclaw", "policy.yaml"), join(tmplDir, "config", "policy.yaml"));
+  // Old layout fallback: openclaw/config/
+  if (!await fileExists(join(tmplDir, "config", "openclaw.json"))) {
+    await copyIfExists(join(projectDir, "openclaw", "config", "openclaw.json"), join(tmplDir, "config", "openclaw.json"));
+  }
+  if (!await fileExists(join(tmplDir, "config", "policy.yaml"))) {
+    await copyIfExists(join(projectDir, "openclaw", "config", "policy.yaml"), join(tmplDir, "config", "policy.yaml"));
   }
 
   // Create USER.template.md
@@ -67,65 +68,85 @@ export async function migrateToMulti(
 
   // Step 2: Migrate existing user data to instances/default/
   const defaultInstDir = join(projectDir, "instances", "default");
-  await mkdir(join(defaultInstDir, "raw", "sessions"), { recursive: true, mode: 0o700 });
+  await mkdir(join(defaultInstDir, "openclaw", "workspace", "memory"), { recursive: true, mode: 0o700 });
+  await mkdir(join(defaultInstDir, "openclaw", "sessions"), { recursive: true, mode: 0o700 });
+  await mkdir(join(defaultInstDir, "openclaw", "logs"), { recursive: true, mode: 0o700 });
   await mkdir(join(defaultInstDir, "raw", "workspace-snapshots"), { recursive: true, mode: 0o700 });
   await mkdir(join(defaultInstDir, "processed"), { recursive: true, mode: 0o700 });
-  await mkdir(join(defaultInstDir, "logs"), { recursive: true, mode: 0o700 });
+
+  // Copy config files to instance
+  await copyIfExists(join(tmplDir, "config", "openclaw.json"), join(defaultInstDir, "openclaw", "openclaw.json"));
+  await copyIfExists(join(tmplDir, "config", "policy.yaml"), join(defaultInstDir, "openclaw", "policy.yaml"));
 
   // Move MEMORY.md to default instance
-  await copyIfExists(join(wsDir, "MEMORY.md"), join(defaultInstDir, "MEMORY.md"));
+  await copyIfExists(join(wsDir, "MEMORY.md"), join(defaultInstDir, "openclaw", "workspace", "MEMORY.md"));
 
   // Create a USER.md for the default instance
-  if (!await fileExists(join(defaultInstDir, "USER.md"))) {
+  if (!await fileExists(join(defaultInstDir, "openclaw", "workspace", "USER.md"))) {
     await Bun.write(
-      join(defaultInstDir, "USER.md"),
+      join(defaultInstDir, "openclaw", "workspace", "USER.md"),
       `# ${projectName} — User Profile (default)\n\n- User ID: default\n- Migrated from single-instance mode\n`,
     );
   }
 
-  // Copy raw session logs
-  const rawSessionsSrc = join(projectDir, "openclaw", "raw", "sessions");
-  try {
-    const files = await readdir(rawSessionsSrc);
-    for (const file of files) {
-      await cp(
-        join(rawSessionsSrc, file),
-        join(defaultInstDir, "raw", "sessions", file),
-        { recursive: true },
-      );
+  // Copy raw session logs (check both old and new layout)
+  for (const sessionsDir of [
+    join(projectDir, "openclaw", "sessions"),
+    join(projectDir, "openclaw", "raw", "sessions"),
+  ]) {
+    try {
+      const files = await readdir(sessionsDir);
+      for (const file of files) {
+        await cp(
+          join(sessionsDir, file),
+          join(defaultInstDir, "openclaw", "sessions", file),
+          { recursive: true },
+        );
+      }
+      break; // Found sessions, stop checking
+    } catch {
+      // Try next location
     }
-  } catch {
-    // No session logs
   }
 
-  // Copy workspace snapshots
-  const snapshotsSrc = join(projectDir, "openclaw", "raw", "workspace-snapshots");
-  try {
-    const files = await readdir(snapshotsSrc);
-    for (const file of files) {
-      await cp(
-        join(snapshotsSrc, file),
-        join(defaultInstDir, "raw", "workspace-snapshots", file),
-        { recursive: true },
-      );
+  // Copy workspace snapshots (check both old and new layout)
+  for (const snapshotsDir of [
+    join(projectDir, "raw", "workspace-snapshots"),
+    join(projectDir, "openclaw", "raw", "workspace-snapshots"),
+  ]) {
+    try {
+      const files = await readdir(snapshotsDir);
+      for (const file of files) {
+        await cp(
+          join(snapshotsDir, file),
+          join(defaultInstDir, "raw", "workspace-snapshots", file),
+          { recursive: true },
+        );
+      }
+      break;
+    } catch {
+      // Try next location
     }
-  } catch {
-    // No snapshots
   }
 
-  // Copy processed/
-  const processedSrc = join(projectDir, "openclaw", "processed");
-  try {
-    const files = await readdir(processedSrc);
-    for (const file of files) {
-      await cp(
-        join(processedSrc, file),
-        join(defaultInstDir, "processed", file),
-        { recursive: true },
-      );
+  // Copy processed/ (check both old and new layout)
+  for (const processedDir of [
+    join(projectDir, "processed"),
+    join(projectDir, "openclaw", "processed"),
+  ]) {
+    try {
+      const files = await readdir(processedDir);
+      for (const file of files) {
+        await cp(
+          join(processedDir, file),
+          join(defaultInstDir, "processed", file),
+          { recursive: true },
+        );
+      }
+      break;
+    } catch {
+      // Try next location
     }
-  } catch {
-    // No processed data
   }
 
   // Step 3: Update .gitignore (single write, no double-write bug)

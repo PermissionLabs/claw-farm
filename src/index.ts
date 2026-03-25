@@ -31,6 +31,7 @@ Usage:
   claw-farm despawn <project> --user <id> Stop and remove an instance
   claw-farm instances <project>          List all instances for a project
   claw-farm upgrade [name]               Re-generate claw-farm files with latest templates
+  claw-farm upgrade [name] --force-policy Upgrade and overwrite policy.yaml
   claw-farm memory:rebuild [name]        Rebuild processed memory from raw data
   claw-farm cloud:compose [outfile]      Generate unified cloud deploy compose
 

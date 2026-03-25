@@ -67,23 +67,20 @@ my-agent/
 │   ├── Dockerfile
 │   └── requirements.txt
 │
-├── openclaw/
-│   ├── config/
-│   │   ├── openclaw.json          ← LLM 설정 (키 없음! 프록시 경유)
-│   │   └── policy.yaml             ← 툴 접근 제한 (fs, http, shell)
-│   │
+├── openclaw/                       ← /home/node/.openclaw로 마운트
+│   ├── openclaw.json              ← LLM 설정 (키 없음! 프록시 경유)
+│   ├── policy.yaml                 ← 툴 접근 제한 (fs, http, shell)
 │   ├── workspace/                  ← ★ 에이전트가 읽고 쓰는 공간
 │   │   ├── SOUL.md                     성격/행동 규칙
 │   │   ├── MEMORY.md                   대화 통해 자동 축적
 │   │   └── skills/                     커스텀 스킬
-│   │
-│   ├── raw/                        ← ★ Layer 0: 절대 삭제 금지
-│   │   ├── sessions/                   세션 로그 원본 (.jsonl)
-│   │   └── workspace-snapshots/        up/down 시 자동 스냅샷
-│   │
-│   └── processed/                  ← Layer 1: 날려도 됨, 리빌드 가능
+│   ├── sessions/                   ← ★ Layer 0: 절대 삭제 금지 (.jsonl 로그)
+│   └── logs/                       ← 에이전트 감사 로그
 │
-├── logs/                           ← 감사 로그
+├── raw/                            ← 워크스페이스 스냅샷 (up/down 시 자동)
+│   └── workspace-snapshots/
+├── processed/                      ← Layer 1: 날려도 됨, 리빌드 가능
+├── logs/                           ← API 프록시 감사 로그
 │
 ├── nginx/                          ← (cloud:compose 시 생성)
 │   └── nginx.conf                     클라우드 배포용 리버스 프록시
@@ -258,7 +255,7 @@ openclaw은 internal 네트워크에 완전 격리 — 인터넷 접근 불가.
 │  4. 클린한 LLM 응답 받음                                     │
 │  5. MEMORY.md 업데이트: "뽀삐 보호자 연락처 있음"              │
 │  6. 유저에게 답변                                            │
-│  7. 세션 로그 → raw/sessions/에 자동 저장                     │
+│  7. 세션 로그 → sessions/에 자동 저장                         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -334,18 +331,21 @@ dog-agent/                             ← 프로젝트 루트
 └── instances/                         ← ★ 유저별 데이터 (gitignored)
     ├── alice/
     │   ├── docker-compose.openclaw.yml    인스턴스별 compose
-    │   ├── USER.md                     "강아지: 뽀삐, 3살 말티즈"
-    │   ├── MEMORY.md                      Alice의 대화 기억
-    │   ├── raw/sessions/
+    │   ├── openclaw/                      /home/node/.openclaw로 마운트
+    │   │   ├── openclaw.json                 template/config/에서 복사
+    │   │   ├── policy.yaml                   template/config/에서 복사
+    │   │   ├── workspace/
+    │   │   │   ├── USER.md                "강아지: 뽀삐, 3살 말티즈"
+    │   │   │   ├── MEMORY.md                 Alice의 대화 기억
+    │   │   │   └── memory/
+    │   │   ├── sessions/
+    │   │   └── logs/
     │   ├── raw/workspace-snapshots/
-    │   ├── processed/
-    │   └── logs/
+    │   └── processed/
     │
     └── bob/
         ├── docker-compose.openclaw.yml
-        ├── USER.md                     "강아지: 맥스, 5살 골든리트리버"
-        ├── MEMORY.md                      Bob의 대화 기억
-        ├── raw/sessions/
+        ├── openclaw/                      alice와 동일한 구조
         └── ...
 ```
 
@@ -367,19 +367,16 @@ $ claw-farm instances dog-agent
 └──────────────────┴─────────┴───────────┘
 ```
 
-공유 템플릿 파일은 읽기 전용으로 각 인스턴스에 마운트:
+각 인스턴스는 자체 `openclaw/` 디렉토리를 `/home/node/.openclaw`로 마운트하고,
+공유 템플릿 파일은 읽기 전용으로 오버레이:
 ```yaml
 volumes:
-  # 설정 파일 개별 마운트 (상위 디렉토리 쉐도잉 방지)
-  - ../../template/config/openclaw.json:/...openclaw.json:ro
-  - ../../template/config/policy.yaml:/...policy.yaml:ro
-  # 공유 워크스페이스 파일
+  # 디렉토리 마운트 (쓰기 가능 — OpenClaw config atomic rename 필요)
+  - ./openclaw:/home/node/.openclaw
+  # 공유 템플릿 파일 읽기 전용 오버레이
   - ../../template/SOUL.md:/...workspace/SOUL.md:ro
   - ../../template/AGENTS.md:/...workspace/AGENTS.md:ro
   - ../../template/skills:/...workspace/skills:ro
-  # 유저별 데이터
-  - ./USER.md:/...workspace/USER.md       # 유저별
-  - ./MEMORY.md:/...workspace/MEMORY.md         # 유저별
 ```
 
 ### 멀티 인스턴스 명령어
@@ -452,18 +449,17 @@ dog-agent (기존)                    dog-agent (claw-farm 등록 후)
 ├── docker-compose.yml  ← 안 건드림  ├── docker-compose.yml    (그대로)
 ├── .env                            ├── .env                  (그대로)
 ├── openclaw/                       ├── openclaw/
-│   ├── config/                     │   ├── config/
-│   │   └── openclaw.json          │   │   ├── openclaw.json (그대로)
-│   └── workspace/                  │   │   └── policy.yaml    ★ 추가
-│       ├── SOUL.md                 │   ├── workspace/         (그대로)
-│       ├── MEMORY.md               │   ├── raw/               ★ 추가
-│       ├── AGENTS.md               │   │   ├── sessions/
-│       └── skills/                 │   │   └── workspace-snapshots/
-├── mem0/                           │   └── processed/         ★ 추가
-│   ├── Dockerfile                  ├── mem0/                  (그대로)
-│   └── mem0_server.py              ├── api-proxy/             ★ 추가
-└── data/qdrant/                    │   ├── api_proxy.py
-                                    │   ├── Dockerfile
+│   ├── config/                     │   ├── openclaw.json     ★ 추가 (프록시 라우팅)
+│   │   └── openclaw.json          │   ├── policy.yaml        ★ 추가
+│   └── workspace/                  │   ├── workspace/         (그대로)
+│       ├── SOUL.md                 │   ├── sessions/          ★ 추가
+│       ├── MEMORY.md               │   └── logs/              ★ 추가
+│       ├── AGENTS.md               ├── raw/workspace-snapshots/ ★ 추가
+│       └── skills/                 ├── processed/             ★ 추가
+├── mem0/                           ├── mem0/                  (그대로)
+│   ├── Dockerfile                  ├── api-proxy/             ★ 추가
+│   └── mem0_server.py              │   ├── api_proxy.py
+└── data/qdrant/                    │   ├── Dockerfile
                                     │   └── requirements.txt
                                     ├── logs/                  ★ 추가
                                     └── .claw-farm.json        ★ 추가

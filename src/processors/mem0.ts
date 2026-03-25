@@ -12,7 +12,7 @@ export const mem0Processor: MemoryProcessor = {
   async init(projectDir: string) {
     const mem0Dir = join(projectDir, "mem0");
     await mkdir(mem0Dir, { recursive: true });
-    await mkdir(join(projectDir, "openclaw", "processed"), { recursive: true });
+    await mkdir(join(projectDir, "processed"), { recursive: true });
     await mkdir(join(projectDir, "data", "qdrant"), { recursive: true });
 
     // Write Mem0 Dockerfile
@@ -200,7 +200,7 @@ MEM0_API_KEY=
     );
 
     const { readdir } = await import("node:fs/promises");
-    const sessionsDir = join(projectDir, "openclaw", "raw", "sessions");
+    const sessionsDir = join(projectDir, "openclaw", "sessions");
 
     try {
       const files = await readdir(sessionsDir);

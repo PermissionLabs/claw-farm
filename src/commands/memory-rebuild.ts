@@ -18,7 +18,7 @@ export async function memoryRebuildCommand(args: string[]): Promise<void> {
   if (entry.multiInstance && userId) {
     // Rebuild specific instance memory
     console.log(`\n🔄 Rebuilding memory for ${projectName}/${userId}...`);
-    await rebuildInstanceMemory(entry.path, userId);
+    await rebuildInstanceMemory(entry.path, userId, processor);
     console.log(`\n✅ Memory rebuild complete for ${projectName}/${userId}.\n`);
     return;
   }
@@ -30,7 +30,7 @@ export async function memoryRebuildCommand(args: string[]): Promise<void> {
     console.log(`\n🔄 Rebuilding memory for all ${userIds.length} instance(s) of ${projectName}...`);
     for (const uid of userIds) {
       console.log(`\n  → ${uid}`);
-      await rebuildInstanceMemory(entry.path, uid);
+      await rebuildInstanceMemory(entry.path, uid, processor);
     }
     console.log(`\n✅ Memory rebuild complete for ${projectName}.\n`);
     return;
@@ -48,10 +48,35 @@ export async function memoryRebuildCommand(args: string[]): Promise<void> {
   console.log(`\n✅ Memory rebuild complete for ${projectName}.\n`);
 }
 
-async function rebuildInstanceMemory(projectDir: string, userId: string): Promise<void> {
+async function rebuildInstanceMemory(
+  projectDir: string,
+  userId: string,
+  processor: "builtin" | "mem0" = "builtin",
+): Promise<void> {
   const instDir = instanceDir(projectDir, userId);
-  const snapshotsDir = join(instDir, "raw", "workspace-snapshots");
 
+  if (processor === "mem0") {
+    // Re-index sessions from instance into Qdrant
+    console.log("    Mem0 processor: re-indexing from instance sessions...");
+    const sessionsDir = join(instDir, "openclaw", "sessions");
+    try {
+      const files = await readdir(sessionsDir);
+      const jsonlFiles = files.filter((f) => f.endsWith(".jsonl"));
+      if (jsonlFiles.length === 0) {
+        console.log("    No session logs found — nothing to rebuild");
+        return;
+      }
+      console.log(`    Found ${jsonlFiles.length} session log(s) to process`);
+      // TODO: Parse JSONL and POST to Mem0 /memories/add
+      console.log("    (Full re-indexing not yet implemented — raw data preserved)");
+    } catch {
+      console.log("    Sessions directory not found — nothing to rebuild");
+    }
+    return;
+  }
+
+  // Builtin processor: rebuild MEMORY.md from latest snapshot
+  const snapshotsDir = join(instDir, "raw", "workspace-snapshots");
   try {
     const snapshots = await readdir(snapshotsDir);
     if (snapshots.length === 0) {
@@ -60,7 +85,7 @@ async function rebuildInstanceMemory(projectDir: string, userId: string): Promis
     }
     const latest = snapshots.sort().at(-1)!;
     const memoryContent = await Bun.file(join(snapshotsDir, latest, "MEMORY.md")).text();
-    await Bun.write(join(instDir, "MEMORY.md"), memoryContent);
+    await Bun.write(join(instDir, "openclaw", "workspace", "MEMORY.md"), memoryContent);
     console.log(`    Rebuilt MEMORY.md from snapshot: ${latest}`);
   } catch {
     console.log("    No snapshots available — skipping rebuild");

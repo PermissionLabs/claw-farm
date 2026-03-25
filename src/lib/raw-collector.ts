@@ -7,14 +7,14 @@ import { mkdir } from "node:fs/promises";
  */
 
 export async function ensureRawDirs(projectDir: string): Promise<void> {
-  const rawBase = join(projectDir, "openclaw", "raw");
-  await mkdir(join(rawBase, "sessions"), { recursive: true });
-  await mkdir(join(rawBase, "workspace-snapshots"), { recursive: true });
+  await mkdir(join(projectDir, "openclaw", "sessions"), { recursive: true });
+  await mkdir(join(projectDir, "openclaw", "logs"), { recursive: true });
+  await mkdir(join(projectDir, "raw", "workspace-snapshots"), { recursive: true });
 }
 
 export async function snapshotWorkspace(projectDir: string): Promise<string> {
   const wsDir = join(projectDir, "openclaw", "workspace");
-  const snapDir = join(projectDir, "openclaw", "raw", "workspace-snapshots");
+  const snapDir = join(projectDir, "raw", "workspace-snapshots");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const snapPath = join(snapDir, timestamp);
 

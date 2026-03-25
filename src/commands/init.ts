@@ -66,9 +66,8 @@ export async function initCommand(args: string[]): Promise<void> {
   console.log(`✓ Registered in global registry (port: ${entry.port})`);
 
   // Create directory structure
-  await mkdir(join(projectDir, "openclaw", "config"), { recursive: true });
   await mkdir(join(projectDir, "openclaw", "workspace", "skills"), { recursive: true });
-  await mkdir(join(projectDir, "openclaw", "processed"), { recursive: true });
+  await mkdir(join(projectDir, "processed"), { recursive: true });
   await mkdir(join(projectDir, "logs"), { recursive: true });
   await ensureRawDirs(projectDir);
   console.log("✓ Created openclaw/ directory structure");
@@ -83,17 +82,17 @@ export async function initCommand(args: string[]): Promise<void> {
 
   // Write OpenClaw config
   await Bun.write(
-    join(projectDir, "openclaw", "config", "openclaw.json"),
-    openclawConfigTemplate(name, processor),
+    join(projectDir, "openclaw", "openclaw.json"),
+    openclawConfigTemplate(name, processor, llm),
   );
-  console.log("✓ Generated openclaw/config/openclaw.json");
+  console.log("✓ Generated openclaw/openclaw.json");
 
   // Write policy.yaml (tool access restrictions)
   await Bun.write(
-    join(projectDir, "openclaw", "config", "policy.yaml"),
+    join(projectDir, "openclaw", "policy.yaml"),
     policyTemplate(name),
   );
-  console.log("✓ Generated openclaw/config/policy.yaml");
+  console.log("✓ Generated openclaw/policy.yaml");
 
   // Write API Proxy sidecar (key isolation + PII filter)
   const proxyDir = join(projectDir, "api-proxy");
@@ -160,11 +159,11 @@ async function registerExisting(
   const entry = await addProject(name, projectDir, processor);
 
   // Ensure directories exist
-  await mkdir(join(projectDir, "openclaw", "config"), { recursive: true });
-  await mkdir(join(projectDir, "openclaw", "processed"), { recursive: true });
+  await mkdir(join(projectDir, "openclaw", "workspace"), { recursive: true });
+  await mkdir(join(projectDir, "processed"), { recursive: true });
   await mkdir(join(projectDir, "logs"), { recursive: true });
   await ensureRawDirs(projectDir);
-  console.log("✓ Created raw/ + processed/ + logs/ directories");
+  console.log("✓ Created directories");
 
   // Generate docker-compose.openclaw.yml (always — this is what claw-farm up uses)
   const composePath = join(projectDir, "docker-compose.openclaw.yml");
@@ -176,27 +175,26 @@ async function registerExisting(
   console.log("✓ Generated docker-compose.openclaw.yml");
 
   // Backup and update openclaw.json to use api-proxy
-  const configPath = join(projectDir, "openclaw", "config", "openclaw.json");
+  const configPath = join(projectDir, "openclaw", "openclaw.json");
   try {
     const existing = await Bun.file(configPath).text();
-    // Backup existing config
     const backupPath = configPath + ".backup";
     await Bun.write(backupPath, existing);
     console.log(`✓ Backed up existing openclaw.json → openclaw.json.backup`);
   } catch {
     // No existing config — that's fine
   }
-  await Bun.write(configPath, openclawConfigTemplate(name, processor));
-  console.log("✓ Generated openclaw/config/openclaw.json (routes through api-proxy)");
+  await Bun.write(configPath, openclawConfigTemplate(name, processor, llm));
+  console.log("✓ Generated openclaw/openclaw.json (routes through api-proxy)");
 
   // Add policy.yaml if missing
-  const policyPath = join(projectDir, "openclaw", "config", "policy.yaml");
+  const policyPath = join(projectDir, "openclaw", "policy.yaml");
   try {
     await Bun.file(policyPath).text();
     console.log("✓ policy.yaml already exists — skipped");
   } catch {
     await Bun.write(policyPath, policyTemplate(name));
-    console.log("✓ Generated openclaw/config/policy.yaml");
+    console.log("✓ Generated openclaw/policy.yaml");
   }
 
   // Add api-proxy if missing
@@ -299,7 +297,7 @@ async function initMulti(
   // Write config files
   await Bun.write(
     join(tmplDir, "config", "openclaw.json"),
-    openclawConfigTemplate(name, processor),
+    openclawConfigTemplate(name, processor, llm),
   );
   console.log("✓ Generated template/config/openclaw.json");
 

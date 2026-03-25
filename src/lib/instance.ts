@@ -27,11 +27,13 @@ export async function ensureInstanceDirs(
 ): Promise<string> {
   validateName(userId, "user ID");
   const instDir = instanceDir(projectDir, userId);
-  await mkdir(join(instDir, "raw", "sessions"), { recursive: true, mode: 0o700 });
+  // Container mount directory (openclaw/ = /home/node/.openclaw)
+  await mkdir(join(instDir, "openclaw", "workspace", "memory"), { recursive: true, mode: 0o700 });
+  await mkdir(join(instDir, "openclaw", "sessions"), { recursive: true, mode: 0o700 });
+  await mkdir(join(instDir, "openclaw", "logs"), { recursive: true, mode: 0o700 });
+  // Memory pipeline directories (not in container)
   await mkdir(join(instDir, "raw", "workspace-snapshots"), { recursive: true, mode: 0o700 });
   await mkdir(join(instDir, "processed"), { recursive: true, mode: 0o700 });
-  await mkdir(join(instDir, "logs"), { recursive: true, mode: 0o700 });
-  await mkdir(join(instDir, "memory"), { recursive: true, mode: 0o700 });
   return instDir;
 }
 

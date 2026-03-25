@@ -168,6 +168,15 @@ export function mergeOpenclawConfig(
       (template.models ?? {}) as Record<string, unknown>,
     );
     merged.env = template.env;
+    // Ensure every provider has a models array (OpenClaw requires it)
+    const providers = (merged.models as Record<string, unknown>)?.providers as Record<string, Record<string, unknown>> | undefined;
+    if (providers) {
+      for (const key of Object.keys(providers)) {
+        if (providers[key] && !Array.isArray(providers[key].models)) {
+          providers[key].models = [];
+        }
+      }
+    }
     // Remove root-level controlUi if present (OpenClaw reads gateway.controlUi)
     delete merged.controlUi;
     return JSON.stringify(merged, null, 2) + "\n";
