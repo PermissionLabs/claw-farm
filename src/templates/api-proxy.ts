@@ -16,11 +16,16 @@ export function apiProxyServerTemplate(): string {
 API Proxy — key injection + PII redaction + response secret scanning.
 Sits between OpenClaw and external LLM APIs.
 
+Supports multiple providers:
+  - gemini (default): Google Gemini API
+  - anthropic: Anthropic Claude API
+  - openai-compat: Any OpenAI-compatible endpoint (e.g. claude-max-api-proxy)
+
 Egress (outbound):  PII detected → auto-redacted before sending to LLM
 Ingress (response): Secrets detected → stripped before returning to agent
 
-OpenClaw → http://api-proxy:8080/v1beta/... → (redact + key inject) → Gemini API
-                                             ← (secret scan) ←
+OpenClaw → http://api-proxy:8080/... → (redact + key inject) → LLM API
+                                      ← (secret scan) ←
 """
 
 import hashlib
@@ -30,6 +35,7 @@ import os
 import re
 import time
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import FastAPI, Request, Response
@@ -40,8 +46,59 @@ logger = logging.getLogger("api-proxy")
 app = FastAPI(title="API Proxy")
 
 # --- Config ---
+# Provider: gemini (default) | anthropic | openai-compat
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "").strip().lower()
+
+# Provider-specific keys
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-UPSTREAM_BASE = os.environ.get("UPSTREAM_BASE", "https://generativelanguage.googleapis.com")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+
+# OpenAI-compatible base URL (for proxies like claude-max-api-proxy)
+OPENAI_COMPAT_BASE_URL = os.environ.get("OPENAI_COMPAT_BASE_URL", "")
+
+# Auto-detect provider if not explicitly set
+if not LLM_PROVIDER:
+    if ANTHROPIC_API_KEY:
+        LLM_PROVIDER = "anthropic"
+    elif OPENAI_COMPAT_BASE_URL or OPENAI_API_KEY:
+        LLM_PROVIDER = "openai-compat"
+    else:
+        LLM_PROVIDER = "gemini"
+
+# Upstream configuration per provider
+PROVIDER_CONFIG = {
+    "gemini": {
+        "base_url": os.environ.get("UPSTREAM_BASE", "https://generativelanguage.googleapis.com"),
+        "auth_header": "x-goog-api-key",
+        "auth_key": GEMINI_API_KEY,
+        "path_prefixes": ("v1beta/", "v1/", "v1alpha/", "v1beta1/"),
+        "query_allowlist": {"alt"},
+        "disable_thinking": True,
+    },
+    "anthropic": {
+        "base_url": "https://api.anthropic.com",
+        "auth_header": "x-api-key",
+        "auth_key": ANTHROPIC_API_KEY,
+        "path_prefixes": ("v1/",),
+        "query_allowlist": set(),
+        "disable_thinking": False,
+    },
+    "openai-compat": {
+        "base_url": OPENAI_COMPAT_BASE_URL.rstrip("/") if OPENAI_COMPAT_BASE_URL else "http://host.docker.internal:3456",
+        "auth_header": "authorization",
+        "auth_key": f"Bearer {OPENAI_API_KEY}" if OPENAI_API_KEY else "",
+        "path_prefixes": ("v1/",),
+        "query_allowlist": set(),
+        "disable_thinking": False,
+    },
+}
+
+ACTIVE_PROVIDER = PROVIDER_CONFIG.get(LLM_PROVIDER, PROVIDER_CONFIG["gemini"])
+UPSTREAM_BASE = ACTIVE_PROVIDER["base_url"]
+
+logger.info(f"Provider: {LLM_PROVIDER} | Upstream: {UPSTREAM_BASE}")
+
 AUDIT_LOG_PATH = os.environ.get("AUDIT_LOG_PATH", "/logs/api-proxy-audit.jsonl")
 MAX_PROMPT_SIZE_MB = int(os.environ.get("MAX_PROMPT_SIZE_MB", "5"))
 
@@ -207,7 +264,7 @@ async def proxy(request: Request, path: str):
     body = await request.body()
 
     # --- Guard 0: Path validation (SSRF prevention) ---
-    ALLOWED_PATH_PREFIXES = ("v1beta/", "v1/", "v1alpha/", "v1beta1/")
+    ALLOWED_PATH_PREFIXES = ACTIVE_PROVIDER["path_prefixes"]
     if not any(path.startswith(p) for p in ALLOWED_PATH_PREFIXES):
         audit_log({"event": "blocked", "reason": "invalid_path", "path": path})
         return Response(
@@ -279,29 +336,29 @@ async def proxy(request: Request, path: str):
     # --- Guard 3: Content hash for audit trail ---
     content_hash = hashlib.sha256(body).hexdigest()[:16] if body else "empty"
 
-    # --- Guard 5: Disable Gemini thinking tokens ---
+    # --- Guard 5: Disable Gemini thinking tokens (Gemini only) ---
     # OpenClaw may inject thinking/reasoning params that Gemini can't handle properly,
     # causing empty responses (known OpenClaw bugs: #33272, #14456, #14071).
-    # Force thinkingBudget: 0 to prevent thinking tokens in responses.
-    try:
-        data = json.loads(body)
-        if isinstance(data, dict):
-            generation_config = data.get("generationConfig", {})
-            if not isinstance(generation_config, dict):
-                generation_config = {}
-            generation_config["thinkingConfig"] = {"thinkingBudget": 0}
-            data["generationConfig"] = generation_config
-            body = json.dumps(data).encode()
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        pass  # Non-JSON body, forward as-is
+    if ACTIVE_PROVIDER.get("disable_thinking"):
+        try:
+            data = json.loads(body)
+            if isinstance(data, dict):
+                generation_config = data.get("generationConfig", {})
+                if not isinstance(generation_config, dict):
+                    generation_config = {}
+                generation_config["thinkingConfig"] = {"thinkingBudget": 0}
+                data["generationConfig"] = generation_config
+                body = json.dumps(data).encode()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass  # Non-JSON body, forward as-is
 
     # --- Forward with key injection ---
     upstream_url = f"{UPSTREAM_BASE}/{path}"
 
     # Query string allowlist (security: only forward known-safe params, never forward "key")
-    ALLOWED_QUERY_PARAMS = {"alt"}
+    allowed_qs = ACTIVE_PROVIDER.get("query_allowlist", set())
     filtered_qs = "&".join(
-        f"{k}={v}" for k, v in request.query_params.items() if k in ALLOWED_QUERY_PARAMS
+        f"{k}={v}" for k, v in request.query_params.items() if k in allowed_qs
     )
     if filtered_qs:
         upstream_url += f"?{filtered_qs}"
@@ -310,8 +367,15 @@ async def proxy(request: Request, path: str):
     FORWARD_HEADERS = {"content-type", "accept", "accept-encoding", "user-agent"}
     headers = {k: v for k, v in request.headers.items() if k.lower() in FORWARD_HEADERS}
 
-    # Inject API key as header (not query param — avoids key leakage in logs/tracebacks)
-    headers["x-goog-api-key"] = GEMINI_API_KEY
+    # Inject API key via provider-specific header
+    auth_header = ACTIVE_PROVIDER["auth_header"]
+    auth_key = ACTIVE_PROVIDER["auth_key"]
+    if auth_key:
+        headers[auth_header] = auth_key
+
+    # Anthropic requires anthropic-version header
+    if LLM_PROVIDER == "anthropic":
+        headers["anthropic-version"] = "2023-06-01"
 
     start = time.monotonic()
 
