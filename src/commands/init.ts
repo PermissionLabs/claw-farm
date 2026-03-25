@@ -31,15 +31,25 @@ export async function initCommand(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const processor = args.includes("--processor")
-    ? (args[args.indexOf("--processor") + 1] as "builtin" | "mem0")
+  const VALID_PROCESSORS = ["builtin", "mem0"] as const;
+  const processorIdx = args.indexOf("--processor");
+  const processor: "builtin" | "mem0" = processorIdx !== -1
+    ? (args[processorIdx + 1] as "builtin" | "mem0")
     : "builtin";
+  if (processorIdx !== -1 && !VALID_PROCESSORS.includes(processor)) {
+    console.error(`Invalid processor: "${processor}". Must be one of: ${VALID_PROCESSORS.join(", ")}`);
+    process.exit(1);
+  }
 
   const VALID_LLM_PROVIDERS = ["gemini", "anthropic", "openai-compat"] as const;
-  const llm: LlmProvider = args.includes("--llm")
-    ? (args[args.indexOf("--llm") + 1] as LlmProvider)
-    : "gemini";
-  if (!VALID_LLM_PROVIDERS.includes(llm)) {
+  const llmIdx = args.indexOf("--llm");
+  const llmArg = llmIdx !== -1 ? args[llmIdx + 1] : undefined;
+  if (llmIdx !== -1 && (!llmArg || llmArg.startsWith("-"))) {
+    console.error(`Missing value for --llm. Must be one of: ${VALID_LLM_PROVIDERS.join(", ")}`);
+    process.exit(1);
+  }
+  const llm: LlmProvider = (llmArg as LlmProvider) ?? "gemini";
+  if (llmIdx !== -1 && !VALID_LLM_PROVIDERS.includes(llm)) {
     console.error(`Invalid LLM provider: "${llm}". Must be one of: ${VALID_LLM_PROVIDERS.join(", ")}`);
     process.exit(1);
   }

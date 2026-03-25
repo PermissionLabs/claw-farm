@@ -28,12 +28,13 @@ export async function ensureInstanceDirs(
   validateName(userId, "user ID");
   const instDir = instanceDir(projectDir, userId);
   // Container mount directory (openclaw/ = /home/node/.openclaw)
-  await mkdir(join(instDir, "openclaw", "workspace", "memory"), { recursive: true, mode: 0o700 });
-  await mkdir(join(instDir, "openclaw", "sessions"), { recursive: true, mode: 0o700 });
-  await mkdir(join(instDir, "openclaw", "logs"), { recursive: true, mode: 0o700 });
+  // Use 0o755 so container's node user (uid 1000) can read/write on Linux hosts
+  await mkdir(join(instDir, "openclaw", "workspace", "memory"), { recursive: true, mode: 0o755 });
+  await mkdir(join(instDir, "openclaw", "sessions"), { recursive: true, mode: 0o755 });
+  await mkdir(join(instDir, "openclaw", "logs"), { recursive: true, mode: 0o755 });
   // Memory pipeline directories (not in container)
-  await mkdir(join(instDir, "raw", "workspace-snapshots"), { recursive: true, mode: 0o700 });
-  await mkdir(join(instDir, "processed"), { recursive: true, mode: 0o700 });
+  await mkdir(join(instDir, "raw", "workspace-snapshots"), { recursive: true, mode: 0o755 });
+  await mkdir(join(instDir, "processed"), { recursive: true, mode: 0o755 });
   return instDir;
 }
 

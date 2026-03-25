@@ -52,23 +52,19 @@ async function moveContents(srcDir: string, destDir: string): Promise<void> {
 }
 
 async function moveFile(src: string, dest: string): Promise<void> {
-  try {
-    const content = await Bun.file(src).text();
-    await Bun.write(dest, content);
-    await rm(src, { force: true });
-  } catch {
-    // Source doesn't exist
-  }
+  const file = Bun.file(src);
+  if (!await file.exists()) return;
+  const content = await file.arrayBuffer();
+  await Bun.write(dest, content);
+  await rm(src, { force: true });
 }
 
 /** Copy file without deleting source. */
 async function copyFile(src: string, dest: string): Promise<void> {
-  try {
-    const content = await Bun.file(src).text();
-    await Bun.write(dest, content);
-  } catch {
-    // Source doesn't exist
-  }
+  const file = Bun.file(src);
+  if (!await file.exists()) return;
+  const content = await file.arrayBuffer();
+  await Bun.write(dest, content);
 }
 
 async function rmIfEmpty(dir: string): Promise<void> {
@@ -262,7 +258,7 @@ export async function upgradeCommand(args: string[]): Promise<void> {
   console.log("✓ Updated .env.example");
 
   console.log(`\n✅ ${projectName} upgraded!`);
-  console.log(`\n   Not touched: .env, SOUL.md, MEMORY.md, AGENTS.md, skills/`);
+  console.log(`\n   Not touched: .env, SOUL.md, MEMORY.md, skills/`);
   console.log(`   💡 Custom compose settings? Put them in docker-compose.openclaw.override.yml`);
   console.log(`      (auto-merged on up/down, survives upgrade)`);
   console.log(`   Run: claw-farm up ${projectName}\n`);
@@ -336,9 +332,22 @@ async function upgradeMultiInstance(
       // Ensure all required directories exist
       await ensureInstanceDirs(projectDir, userId);
 
-      // Copy latest config files from template to instance (copy, not move — template is shared)
-      await copyFile(join(tmplDir, "config", "openclaw.json"), join(instDir, "openclaw", "openclaw.json"));
-      await copyFile(join(tmplDir, "config", "policy.yaml"), join(instDir, "openclaw", "policy.yaml"));
+      // Merge template config into instance (preserves per-instance customizations)
+      const instConfigPath = join(instDir, "openclaw", "openclaw.json");
+      const tmplConfigContent = await Bun.file(join(tmplDir, "config", "openclaw.json")).text().catch(() => "");
+      if (tmplConfigContent) {
+        const instConfigContent = await Bun.file(instConfigPath).text().catch(() => "");
+        if (instConfigContent) {
+          await Bun.write(instConfigPath, mergeOpenclawConfig(tmplConfigContent, instConfigContent));
+        } else {
+          await Bun.write(instConfigPath, tmplConfigContent);
+        }
+      }
+      // Policy: only copy if instance doesn't have one yet (preserve per-instance customizations)
+      const instPolicyPath = join(instDir, "openclaw", "policy.yaml");
+      if (!await fileExists(instPolicyPath)) {
+        await copyFile(join(tmplDir, "config", "policy.yaml"), instPolicyPath);
+      }
 
       const composeContent = instanceComposeTemplate(projectName, userId, inst.port);
       await Bun.write(join(instDir, "docker-compose.openclaw.yml"), composeContent);

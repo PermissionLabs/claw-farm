@@ -167,7 +167,11 @@ export function mergeOpenclawConfig(
       (existing.models ?? {}) as Record<string, unknown>,
       (template.models ?? {}) as Record<string, unknown>,
     );
-    merged.env = template.env;
+    // Merge env: template as base, user additions preserved
+    merged.env = deepMerge(
+      (template.env ?? {}) as Record<string, unknown>,
+      (existing.env ?? {}) as Record<string, unknown>,
+    );
     // Ensure every provider has a models array (OpenClaw requires it)
     const providers = (merged.models as Record<string, unknown>)?.providers as Record<string, Record<string, unknown>> | undefined;
     if (providers) {
@@ -176,6 +180,12 @@ export function mergeOpenclawConfig(
           providers[key].models = [];
         }
       }
+    }
+    // Force-apply security-critical gateway settings from template
+    const mergedGateway = (merged.gateway ?? {}) as Record<string, unknown>;
+    const templateGateway = (template.gateway ?? {}) as Record<string, unknown>;
+    if (templateGateway.controlUi) {
+      mergedGateway.controlUi = templateGateway.controlUi;
     }
     // Remove root-level controlUi if present (OpenClaw reads gateway.controlUi)
     delete merged.controlUi;
