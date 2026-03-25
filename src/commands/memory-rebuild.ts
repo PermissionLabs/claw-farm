@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { mkdir, readdir, rm } from "node:fs/promises";
-import { resolveProjectName } from "../lib/registry.ts";
+import { resolveProjectName, findPositionalArg } from "../lib/registry.ts";
 import { readProjectConfig } from "../lib/config.ts";
 import { instanceDir } from "../lib/instance.ts";
 import { builtinProcessor } from "../processors/builtin.ts";
@@ -9,7 +9,7 @@ import { mem0Processor } from "../processors/mem0.ts";
 export async function memoryRebuildCommand(args: string[]): Promise<void> {
   const userIdx = args.indexOf("--user");
   const userId = userIdx !== -1 ? args[userIdx + 1] : undefined;
-  const name = args.find((a) => !a.startsWith("-") && a !== userId);
+  const name = findPositionalArg(args);
   const { name: projectName, entry } = await resolveProjectName(name);
 
   const config = await readProjectConfig(entry.path);

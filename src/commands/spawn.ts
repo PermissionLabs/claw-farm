@@ -1,11 +1,11 @@
-import { resolveProjectName } from "../lib/registry.ts";
+import { resolveProjectName, findPositionalArg } from "../lib/registry.ts";
 import { readProjectConfig } from "../lib/config.ts";
 import { migrateToMulti } from "../lib/migrate.ts";
 import { spawn } from "../lib/api.ts";
 import { SAFE_NAME_REGEX } from "../lib/registry.ts";
 
 export async function spawnCommand(args: string[]): Promise<void> {
-  const projectArg = args.find((a) => !a.startsWith("-"));
+  const projectArg = findPositionalArg(args);
   if (!projectArg) {
     console.error("Usage: claw-farm spawn <project> --user <id> [--context k=v k2=v2 ...]");
     process.exit(1);

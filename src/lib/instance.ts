@@ -32,6 +32,8 @@ export async function ensureInstanceDirs(
   await mkdir(join(instDir, "openclaw", "workspace", "memory"), { recursive: true, mode: 0o755 });
   await mkdir(join(instDir, "openclaw", "sessions"), { recursive: true, mode: 0o755 });
   await mkdir(join(instDir, "openclaw", "logs"), { recursive: true, mode: 0o755 });
+  // API proxy logs directory (mounted as ./logs:/logs in api-proxy service)
+  await mkdir(join(instDir, "logs"), { recursive: true, mode: 0o755 });
   // Memory pipeline directories (not in container)
   await mkdir(join(instDir, "raw", "workspace-snapshots"), { recursive: true, mode: 0o755 });
   await mkdir(join(instDir, "processed"), { recursive: true, mode: 0o755 });

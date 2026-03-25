@@ -1,10 +1,10 @@
 import { join } from "node:path";
-import { resolveProjectName, listInstances as listRegistryInstances } from "../lib/registry.ts";
+import { resolveProjectName, listInstances as listRegistryInstances, findPositionalArg } from "../lib/registry.ts";
 import { instanceDir } from "../lib/instance.ts";
 import { getComposeStatus } from "../lib/compose.ts";
 
 export async function instancesCommand(args: string[]): Promise<void> {
-  const projectArg = args.find((a) => !a.startsWith("-"));
+  const projectArg = findPositionalArg(args);
   const { name: projectName, entry } = await resolveProjectName(projectArg);
 
   if (!entry.multiInstance) {

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
-import { addProject, loadRegistry, saveRegistry } from "../lib/registry.ts";
+import { addProject, loadRegistry, saveRegistry, findPositionalArg } from "../lib/registry.ts";
 import { writeProjectConfig, envExampleTemplate, type LlmProvider } from "../lib/config.ts";
 import { ensureRawDirs } from "../lib/raw-collector.ts";
 import { baseComposeTemplate } from "../templates/docker-compose.yml.ts";
@@ -18,18 +18,8 @@ import { mem0Processor } from "../processors/mem0.ts";
 import { ensureTemplateDirs, templateDir } from "../lib/instance.ts";
 import { userTemplateContent } from "../templates/USER.template.md.ts";
 
-/** Flags that consume the next arg as their value. */
-const FLAGS_WITH_VALUES = new Set(["--processor", "--llm", "--user", "--context"]);
-
 export async function initCommand(args: string[]): Promise<void> {
-  // Find positional name: skip flags and their values
-  let name: string | undefined;
-  for (let i = 0; i < args.length; i++) {
-    if (FLAGS_WITH_VALUES.has(args[i])) { i++; continue; } // skip flag + value
-    if (args[i].startsWith("-")) continue; // skip boolean flags
-    name = args[i];
-    break;
-  }
+  const name = findPositionalArg(args);
   if (!name) {
     console.error("Usage: claw-farm init <name> [--processor mem0] [--existing] [--multi]");
     process.exit(1);

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { mkdir, readdir, cp, rename, rm } from "node:fs/promises";
-import { resolveProjectName, type ProjectEntry } from "../lib/registry.ts";
+import { resolveProjectName, findPositionalArg, type ProjectEntry } from "../lib/registry.ts";
 import { readProjectConfig, mergeOpenclawConfig, envExampleTemplate } from "../lib/config.ts";
 import { ensureRawDirs } from "../lib/raw-collector.ts";
 import { ensureTemplateDirs, ensureInstanceDirs, templateDir, instanceDir } from "../lib/instance.ts";
@@ -139,11 +139,11 @@ async function migrateInstanceLayout(
   instDir: string,
   tmplConfigDir: string,
 ): Promise<boolean> {
-  const hasNewLayout = await dirExists(join(instDir, "openclaw"));
   const hasOldLayout = await fileExists(join(instDir, "USER.md")) ||
     await fileExists(join(instDir, "MEMORY.md"));
 
-  if (hasNewLayout || !hasOldLayout) return false;
+  // Skip only if no old-layout files remain (fully migrated or fresh instance)
+  if (!hasOldLayout) return false;
 
   // Create new structure
   await mkdir(join(instDir, "openclaw", "workspace", "memory"), { recursive: true });
@@ -177,7 +177,7 @@ async function migrateInstanceLayout(
 }
 
 export async function upgradeCommand(args: string[]): Promise<void> {
-  const name = args.find((a) => !a.startsWith("-"));
+  const name = findPositionalArg(args);
   const { name: projectName, entry } = await resolveProjectName(name);
   const projectDir = entry.path;
   const config = await readProjectConfig(projectDir);
@@ -218,9 +218,11 @@ export async function upgradeCommand(args: string[]): Promise<void> {
   let existingConfig: string | null = null;
   try {
     existingConfig = await Bun.file(configPath).text();
-    await Bun.write(configPath + ".backup", existingConfig);
-  } catch {}
+  } catch {
+    // No existing config
+  }
   if (existingConfig) {
+    await Bun.write(configPath + ".backup", existingConfig);
     await Bun.write(configPath, mergeOpenclawConfig(templateConfig, existingConfig));
     console.log("✓ Merged openclaw/openclaw.json (user settings preserved, backup → .backup)");
   } else {
@@ -277,9 +279,11 @@ async function upgradeMultiInstance(
   let existingConfig: string | null = null;
   try {
     existingConfig = await Bun.file(configPath).text();
-    await Bun.write(configPath + ".backup", existingConfig);
-  } catch {}
+  } catch {
+    // No existing config
+  }
   if (existingConfig) {
+    await Bun.write(configPath + ".backup", existingConfig);
     await Bun.write(configPath, mergeOpenclawConfig(templateConfig, existingConfig));
     console.log("✓ Merged template/config/openclaw.json (user settings preserved, backup → .backup)");
   } else {

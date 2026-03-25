@@ -175,7 +175,7 @@ export function mergeOpenclawConfig(
     );
     const templateEnv = (template.env ?? {}) as Record<string, unknown>;
     for (const key of Object.keys(templateEnv)) {
-      if (key.endsWith("_API_KEY") || key.endsWith("_KEY")) {
+      if (key.endsWith("_API_KEY")) {
         mergedEnv[key] = templateEnv[key]; // force "proxied" sentinel
       }
     }
