@@ -189,11 +189,13 @@ export function mergeOpenclawConfig(
         }
       }
     }
-    // Force-apply security-critical gateway settings from template
+    // Ensure controlUi.enabled from template is applied, but preserve user's
+    // other controlUi settings (allowedOrigins, dangerouslyDisableDeviceAuth, etc.)
     const mergedGateway = (merged.gateway ?? {}) as Record<string, unknown>;
-    const templateGateway = (template.gateway ?? {}) as Record<string, unknown>;
-    if (templateGateway.controlUi) {
-      mergedGateway.controlUi = templateGateway.controlUi;
+    const templateControlUi = ((template.gateway ?? {}) as Record<string, unknown>).controlUi as Record<string, unknown> | undefined;
+    if (templateControlUi) {
+      const userControlUi = (mergedGateway.controlUi ?? {}) as Record<string, unknown>;
+      mergedGateway.controlUi = { ...userControlUi, enabled: templateControlUi.enabled };
     }
     // Remove root-level controlUi if present (OpenClaw reads gateway.controlUi)
     delete merged.controlUi;
