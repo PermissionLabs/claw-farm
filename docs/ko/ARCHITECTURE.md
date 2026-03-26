@@ -368,15 +368,12 @@ $ claw-farm instances dog-agent
 ```
 
 각 인스턴스는 자체 `openclaw/` 디렉토리를 `/home/node/.openclaw`로 마운트하고,
-공유 템플릿 파일은 읽기 전용으로 오버레이:
+공유 템플릿 파일은 spawn/upgrade 시 `openclaw/workspace/`에 복사:
 ```yaml
 volumes:
   # 디렉토리 마운트 (쓰기 가능 — OpenClaw config atomic rename 필요)
+  # 템플릿 파일 (SOUL.md, AGENTS.md, skills/)은 spawn/upgrade 시 복사
   - ./openclaw:/home/node/.openclaw
-  # 공유 템플릿 파일 읽기 전용 오버레이
-  - ../../template/SOUL.md:/...workspace/SOUL.md:ro
-  - ../../template/AGENTS.md:/...workspace/AGENTS.md:ro
-  - ../../template/skills:/...workspace/skills:ro
 ```
 
 ### 멀티 인스턴스 명령어

@@ -51,11 +51,9 @@ services:
       - "127.0.0.1:${port}:18789"
     volumes:
       # Directory mount — OpenClaw needs atomic rename for config updates
+      # Template files (SOUL.md, AGENTS.md, skills/) are copied into openclaw/workspace/
+      # at spawn/upgrade time instead of overlay mounts (Docker Desktop compatibility)
       - ./openclaw:/home/node/.openclaw
-      # Shared template files overlaid read-only
-      - ../../template/SOUL.md:/home/node/.openclaw/workspace/SOUL.md:ro
-      - ../../template/AGENTS.md:/home/node/.openclaw/workspace/AGENTS.md:ro
-      - ../../template/skills:/home/node/.openclaw/workspace/skills:ro
     environment:
       OPENCLAW_API_PROXY: http://api-proxy:8080
       OPENCLAW_SANDBOX: 1

@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { mkdir, readdir, cp, rename, rm } from "node:fs/promises";
 import { resolveProjectName, findPositionalArg, type ProjectEntry } from "../lib/registry.ts";
+import { copyTemplateFiles } from "../lib/api.ts";
 import { readProjectConfig, mergeOpenclawConfig, envExampleTemplate } from "../lib/config.ts";
 import { ensureRawDirs } from "../lib/raw-collector.ts";
 import { ensureTemplateDirs, ensureInstanceDirs, templateDir, instanceDir } from "../lib/instance.ts";
@@ -348,10 +349,13 @@ async function upgradeMultiInstance(
         await copyFile(join(tmplDir, "config", "policy.yaml"), instPolicyPath);
       }
 
+      // Copy shared template files (SOUL.md, AGENTS.md, skills/) into instance workspace
+      await copyTemplateFiles(tmplDir, join(instDir, "openclaw", "workspace"));
+
       const composeContent = instanceComposeTemplate(projectName, userId, inst.port);
       await Bun.write(join(instDir, "docker-compose.openclaw.yml"), composeContent);
     }
-    console.log(`✓ Updated ${instanceIds.length} instance(s) (compose + directories)`);
+    console.log(`✓ Updated ${instanceIds.length} instance(s) (compose + template files + directories)`);
     if (migratedCount > 0) {
       console.log(`  📦 Migrated ${migratedCount} instance(s) to directory mount layout`);
     }
