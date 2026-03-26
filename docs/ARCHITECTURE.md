@@ -370,15 +370,12 @@ $ claw-farm instances dog-agent
 ```
 
 Each instance has its own `openclaw/` directory mounted as `/home/node/.openclaw`,
-with shared template files overlaid read-only:
+with shared template files copied into `openclaw/workspace/` at spawn/upgrade time:
 ```yaml
 volumes:
   # Directory mount (writable — OpenClaw needs atomic rename for config)
+  # Template files (SOUL.md, AGENTS.md, skills/) are copied at spawn/upgrade
   - ./openclaw:/home/node/.openclaw
-  # Shared template files overlaid read-only
-  - ../../template/SOUL.md:/...workspace/SOUL.md:ro
-  - ../../template/AGENTS.md:/...workspace/AGENTS.md:ro
-  - ../../template/skills:/...workspace/skills:ro
 ```
 
 ### Multi-Instance Commands

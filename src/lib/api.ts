@@ -6,6 +6,7 @@
  */
 
 import { join } from "node:path";
+import { mkdir, readdir, cp } from "node:fs/promises";
 import {
   resolveProjectName,
   addInstance,
@@ -62,6 +63,10 @@ export async function spawn(options: {
         await Bun.write(dest, await file.arrayBuffer());
       }
     }
+
+    // Copy shared template files (SOUL.md, AGENTS.md, skills/) into instance workspace
+    // Copied instead of overlay-mounted for Docker Desktop compatibility
+    await copyTemplateFiles(tmplDir, join(instDir, "openclaw", "workspace"));
 
     // Fill USER.md — only write if file doesn't already exist (preserve on re-spawn with --keep-data)
     // OpenClaw auto-loads USER.md into the system prompt (CONTEXT.md is NOT auto-loaded)
@@ -164,4 +169,31 @@ export async function listInstances(
 
 async function fileExists(path: string): Promise<boolean> {
   return Bun.file(path).exists();
+}
+
+/**
+ * Copy shared template files (SOUL.md, AGENTS.md, skills/) into instance workspace.
+ * Always overwrites — template changes should propagate to all instances.
+ */
+export async function copyTemplateFiles(tmplDir: string, workspaceDir: string): Promise<void> {
+  await mkdir(workspaceDir, { recursive: true });
+  // Copy individual shared files
+  for (const file of ["SOUL.md", "AGENTS.md"]) {
+    const src = Bun.file(join(tmplDir, file));
+    if (await src.exists()) {
+      await Bun.write(join(workspaceDir, file), await src.arrayBuffer());
+    }
+  }
+  // Copy skills/ directory
+  const skillsSrc = join(tmplDir, "skills");
+  const skillsDest = join(workspaceDir, "skills");
+  try {
+    const files = await readdir(skillsSrc);
+    await mkdir(skillsDest, { recursive: true });
+    for (const file of files) {
+      await cp(join(skillsSrc, file), join(skillsDest, file), { recursive: true });
+    }
+  } catch {
+    // No skills directory in template
+  }
 }
