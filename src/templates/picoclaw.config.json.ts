@@ -1,25 +1,39 @@
 /**
  * picoclaw configuration template.
  * Routes LLM calls through api-proxy (no direct API key access).
+ *
+ * Required fields discovered from picoclaw v0.2.4 config migration:
+ * - model_list[].model: "provider/model_name" format (routing key)
+ * - model_list[].model_name: must match agents.defaults.model_name
+ * - agents.defaults.provider: provider name for model routing
+ * - channels.pico.enabled: true (at least one channel must be active)
  */
 export function picoClawConfigTemplate(
   _name: string,
   _processor: "builtin" | "mem0",
   llm: "gemini" | "anthropic" | "openai-compat" = "gemini",
 ): string {
-  const providerConfigs: Record<string, { model: string; provider: string; apiBase: string }> = {
+  const providerConfigs: Record<string, {
+    modelName: string;
+    model: string;
+    provider: string;
+    apiBase: string;
+  }> = {
     gemini: {
-      model: "gemini-2.5-flash",
+      modelName: "gemini-2.5-flash",
+      model: "gemini/gemini-2.5-flash",
       provider: "gemini",
       apiBase: "http://api-proxy:8080/v1beta",
     },
     anthropic: {
-      model: "claude-sonnet-4-6",
+      modelName: "claude-sonnet-4-6",
+      model: "anthropic/claude-sonnet-4-6",
       provider: "anthropic",
       apiBase: "http://api-proxy:8080/v1",
     },
     "openai-compat": {
-      model: "gpt-4o",
+      modelName: "gpt-4o",
+      model: "openai/gpt-4o",
       provider: "openai",
       apiBase: "http://api-proxy:8080/v1",
     },
@@ -29,17 +43,33 @@ export function picoClawConfigTemplate(
 
   return JSON.stringify(
     {
+      version: 1,
+      session: {
+        dm_scope: "per-channel-peer",
+      },
       agents: {
         defaults: {
           workspace: "/root/.picoclaw/workspace",
-          model: config.model,
+          restrict_to_workspace: true,
+          provider: config.provider,
+          model_name: config.modelName,
           max_tokens: 4096,
           temperature: 0.7,
+          max_tool_iterations: 50,
+          summarize_message_threshold: 20,
+          summarize_token_percent: 75,
+        },
+      },
+      channels: {
+        pico: {
+          enabled: true,
+          allow_from: [],
         },
       },
       model_list: [
         {
-          provider: config.provider,
+          model_name: config.modelName,
+          model: config.model,
           api_base: config.apiBase,
           api_key: "proxied",
         },
@@ -48,6 +78,15 @@ export function picoClawConfigTemplate(
         host: "0.0.0.0",
         port: 18790,
         log_level: "info",
+      },
+      tools: {
+        read_file: { enabled: true },
+        write_file: { enabled: true },
+        edit_file: { enabled: true },
+        list_dir: { enabled: true },
+        append_file: { enabled: true },
+        skills: { enabled: true },
+        find_skills: { enabled: true },
       },
     },
     null,
