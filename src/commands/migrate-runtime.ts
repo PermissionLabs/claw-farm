@@ -204,6 +204,34 @@ async function migrateInstance(
     proxyMode,
   );
   await Bun.write(join(instDir, "docker-compose.openclaw.yml"), composeContent);
+
+  // Migrate override file service names (e.g., openclaw-gateway → picoclaw-gateway)
+  await migrateOverrideFile(instDir, sourceRuntime.name, targetRuntime.name);
+}
+
+/**
+ * Migrate docker-compose override file: rename service names to match new runtime.
+ * e.g., "openclaw-gateway" → "picoclaw-gateway"
+ */
+async function migrateOverrideFile(
+  dir: string,
+  sourceRuntimeType: RuntimeType,
+  targetRuntimeType: RuntimeType,
+): Promise<boolean> {
+  const overridePath = join(dir, "docker-compose.openclaw.override.yml");
+  try {
+    let content = await Bun.file(overridePath).text();
+    const sourceService = sourceRuntimeType === "picoclaw" ? "picoclaw-gateway" : "openclaw-gateway";
+    const targetService = targetRuntimeType === "picoclaw" ? "picoclaw-gateway" : "openclaw-gateway";
+    if (content.includes(sourceService)) {
+      content = content.replaceAll(sourceService, targetService);
+      await Bun.write(overridePath, content);
+      return true;
+    }
+  } catch {
+    // No override file — nothing to migrate
+  }
+  return false;
 }
 
 export async function migrateRuntimeCommand(args: string[]): Promise<void> {
@@ -370,6 +398,10 @@ export async function migrateRuntimeCommand(args: string[]): Promise<void> {
       processor,
       llm,
     );
+    // Migrate override file service names
+    if (await migrateOverrideFile(projectDir, sourceRuntimeType, targetRuntimeType)) {
+      migrated.push("docker-compose.openclaw.override.yml (service names updated)");
+    }
     console.log(`✓ Migrated files: ${migrated.join(", ")}`);
   }
 
