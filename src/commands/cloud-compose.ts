@@ -40,7 +40,7 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
 
   // Shared networks for cloud isolation
   usedNetworks.add("public-net"); // nginx ↔ host (port binding)
-  usedNetworks.add("egress-net"); // api-proxy ↔ internet (Gemini API)
+  // egress-net is added conditionally per-project when hasProxy=true
 
   for (const name of names) {
     safeYamlIdentifier(name, "project name");
