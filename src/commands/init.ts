@@ -184,7 +184,7 @@ export async function initCommand(args: string[]): Promise<void> {
     createdAt: entry.createdAt,
     llm,
     ...(runtimeType !== "openclaw" ? { runtime: runtimeType } : {}),
-    ...(proxyMode !== "per-instance" ? { proxyMode } : {}),
+    ...(proxyMode !== runtime.defaultProxyMode ? { proxyMode } : {}),
   });
   console.log("✓ Generated .claw-farm.json");
 
@@ -313,7 +313,7 @@ async function registerExisting(
     createdAt: entry.createdAt,
     llm,
     ...(runtimeType !== "openclaw" ? { runtime: runtimeType } : {}),
-    ...(proxyMode !== "per-instance" ? { proxyMode } : {}),
+    ...(proxyMode !== runtime.defaultProxyMode ? { proxyMode } : {}),
   });
 
   console.log(`✓ Registered in global registry (port: ${entry.port})`);
@@ -427,7 +427,7 @@ async function initMulti(
     multiInstance: true,
     llm,
     ...(runtimeType !== "openclaw" ? { runtime: runtimeType } : {}),
-    ...(proxyMode !== "per-instance" ? { proxyMode } : {}),
+    ...(proxyMode !== runtime.defaultProxyMode ? { proxyMode } : {}),
   });
   console.log("✓ Generated .claw-farm.json");
 
