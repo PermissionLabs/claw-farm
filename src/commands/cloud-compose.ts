@@ -1,8 +1,9 @@
 import { resolve, relative, join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { loadRegistry, findPositionalArg } from "../lib/registry.ts";
-import { readProjectConfig } from "../lib/config.ts";
+import { readProjectConfig, resolveRuntimeConfig } from "../lib/config.ts";
 import { portRange } from "../lib/ports.ts";
+import { safeYamlIdentifier } from "../lib/validate.ts";
 import {
   nginxProxyTemplate,
   nginxDockerfileTemplate,
@@ -41,10 +42,11 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
   usedNetworks.add("egress-net"); // api-proxy ↔ internet (Gemini API)
 
   for (const name of names) {
+    safeYamlIdentifier(name, "project name");
     const entry = reg.projects[name];
     const config = await readProjectConfig(entry.path);
     const processor = config?.processor ?? entry.processor;
-    const runtimeType = config?.runtime ?? entry.runtime ?? "openclaw";
+    const { runtimeType, proxyMode } = resolveRuntimeConfig(config, entry);
     const ports = portRange(entry.port);
     const proxyNet = `${name}-proxy-net`;
     usedNetworks.add(proxyNet);
@@ -57,7 +59,11 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
     });
 
     // API Proxy: proxy-net (internal, ↔ agent) + egress-net (outbound to LLM API)
-    services += `  ${name}-api-proxy:
+    // Skip when proxyMode=none — project handles proxying internally
+    if (proxyMode !== "none") {
+      usedNetworks.add("egress-net");
+    }
+    if (proxyMode !== "none") services += `  ${name}-api-proxy:
     build: ./${name}/api-proxy
     expose:
       - "8080"
@@ -98,8 +104,11 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
 
     // Agent gateway: proxy-net (internal only) — NO internet, NO port binding
     // nginx proxies to it via proxy-net
-    const agentNetworks = [proxyNet];
-    const agentDeps = [`      ${name}-api-proxy:\n        condition: service_healthy`];
+    const hasProxy = proxyMode !== "none";
+    const agentNetworks = hasProxy ? [proxyNet] : [];
+    const agentDeps: string[] = hasProxy
+      ? [`      ${name}-api-proxy:\n        condition: service_healthy`]
+      : [];
     if (processor === "mem0") {
       const frontendNet = `${name}-frontend`;
       agentNetworks.push(frontendNet);
@@ -113,10 +122,9 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
       - "18790"
     volumes:
       - ./${name}/picoclaw:/root/.picoclaw
-    environment:
-      PICOCLAW_PROXY_URL: http://${name}-api-proxy:8080
-    networks:
-${agentNetworks.map((n) => `      - ${n}`).join("\n")}
+${hasProxy ? `    environment:
+      PICOCLAW_PROXY_URL: http://${name}-api-proxy:8080` : ""}
+${agentNetworks.length > 0 ? `    networks:\n${agentNetworks.map((n) => `      - ${n}`).join("\n")}` : ""}
     read_only: true
     tmpfs:
       - /tmp:size=50M
@@ -135,8 +143,7 @@ ${agentNetworks.map((n) => `      - ${n}`).join("\n")}
       timeout: 3s
       retries: 5
       start_period: 10s
-    depends_on:
-${agentDeps.join("\n")}
+${agentDeps.length > 0 ? `    depends_on:\n${agentDeps.join("\n")}` : ""}
     restart: unless-stopped
 
 `;
@@ -149,11 +156,10 @@ ${agentDeps.join("\n")}
       # Directory mount — OpenClaw needs atomic rename for config updates
       - ./${name}/openclaw:/home/node/.openclaw
     environment:
-      OPENCLAW_API_PROXY: http://${name}-api-proxy:8080
+${hasProxy ? `      OPENCLAW_API_PROXY: http://${name}-api-proxy:8080` : `      # OPENCLAW_API_PROXY: not set (proxyMode: none)`}
       OPENCLAW_SANDBOX: 1
       OPENCLAW_AUDIT_LOG: /home/node/.openclaw/logs/audit.jsonl
-    networks:
-${agentNetworks.map((n) => `      - ${n}`).join("\n")}
+${agentNetworks.length > 0 ? `    networks:\n${agentNetworks.map((n) => `      - ${n}`).join("\n")}` : ""}
     read_only: true
     tmpfs:
       - /tmp:size=100M
@@ -169,8 +175,7 @@ ${agentNetworks.map((n) => `      - ${n}`).join("\n")}
           cpus: "1.0"
         reservations:
           memory: 256M
-    depends_on:
-${agentDeps.join("\n")}
+${agentDeps.length > 0 ? `    depends_on:\n${agentDeps.join("\n")}` : ""}
     restart: unless-stopped
 
 `;
@@ -244,10 +249,15 @@ ${agentDeps.join("\n")}
     }
   }
 
-  // Nginx reverse proxy: public-net (port binding) + all proxy-nets (internal comms)
+  // Nginx reverse proxy: public-net (port binding) + proxy-nets for projects with a proxy
   const nginxNetworks = [
     "public-net",
-    ...names.map((n) => `${n}-proxy-net`),
+    ...names
+      .filter((n) => {
+        const cfg = reg.projects[n];
+        return (cfg as { proxyMode?: string }).proxyMode !== "none";
+      })
+      .map((n) => `${n}-proxy-net`),
   ];
   const portMappings = nginxProjects
     .map((p) => `      - "${p.port}:${p.port}"`)
@@ -284,11 +294,16 @@ ${nginxProjects.map((p) => `      ${p.containerName}:\n        condition: servic
   // Networks
   let networks = "networks:\n";
   networks += "  public-net:\n    # nginx port binding to host\n";
-  networks += "  egress-net:\n    # api-proxy outbound to Gemini API\n";
+  if (usedNetworks.has("egress-net")) {
+    networks += "  egress-net:\n    # api-proxy outbound to Gemini API\n";
+  }
   for (const name of names) {
-    networks += `  ${name}-proxy-net:\n    internal: true\n`;
     const config = await readProjectConfig(reg.projects[name].path);
+    const projectProxyMode = config?.proxyMode ?? "per-instance";
     const processor = config?.processor ?? reg.projects[name].processor;
+    if (projectProxyMode !== "none") {
+      networks += `  ${name}-proxy-net:\n    internal: true\n`;
+    }
     if (processor === "mem0") {
       networks += `  ${name}-frontend:\n    internal: true\n`;
       networks += `  ${name}-backend:\n    internal: true\n`;
