@@ -65,7 +65,7 @@ This will:
 |---------|-------------|
 | `claw-farm init <name>` | Scaffold agent project (default: OpenClaw) |
 | `claw-farm init <name> --runtime <rt>` | Set runtime (openclaw\|picoclaw) |
-| `claw-farm init <name> --proxy-mode <mode>` | Set proxy mode (per-instance\|shared) |
+| `claw-farm init <name> --proxy-mode <mode>` | Set proxy mode (per-instance\|shared\|none) |
 | `claw-farm init <name> --multi` | Scaffold multi-instance project (template/ structure) |
 | `claw-farm init <name> --processor mem0` | Scaffold with Mem0+Qdrant |
 | `claw-farm init <name> --llm <provider>` | Set LLM provider (gemini\|anthropic\|openai-compat) |
@@ -210,6 +210,17 @@ git push origin main
 ```
 
 Recommended: Hetzner CX22 (~€4.35/mo) with Coolify self-hosted.
+
+## Claude Code Skills
+
+claw-farm ships two [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills) for AI agent integration:
+
+| Skill | Trigger | Contents |
+|-------|---------|----------|
+| `/claw-farm-cli` | claw-farm, spawn, despawn, openclaw, picoclaw | CLI command reference, flags, runtime comparison, programmatic API |
+| `/claw-farm-code` | .claw-farm.json, SOUL.md, MEMORY.md, workspace | File map, edit safety guide, security rules, memory architecture |
+
+**Use in other projects:** Copy `.claude/skills/claw-farm-cli/` and/or `.claude/skills/claw-farm-code/` to your project's `.claude/skills/`, or to `~/.claude/skills/` for global availability.
 
 ## Documentation
 

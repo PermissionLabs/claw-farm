@@ -44,7 +44,10 @@ claw-farm CLI
   ├── lib/             # registry, compose, config, ports, raw-collector, instance, migrate, api
   ├── processors/      # interface, builtin (MEMORY.md), mem0 (Qdrant)
   ├── runtimes/        # interface, openclaw (~1.5GB), picoclaw (~20MB Go)
-  └── templates/       # docker-compose, docker-compose.instance, docker-compose.mem0, USER.template, openclaw.json, SOUL.md, policy.yaml, api-proxy, nginx-proxy
+  ├── templates/       # docker-compose, docker-compose.instance, docker-compose.mem0, USER.template, openclaw.json, SOUL.md, policy.yaml, api-proxy, nginx-proxy
+  └── .claude/skills/  # Claude Code skills for AI agent integration
+        ├── claw-farm-cli/   # CLI command reference (all commands, flags, runtime comparison)
+        └── claw-farm-code/  # Codebase guide (file map, edit safety, security rules, memory arch)
 ```
 
 **Multi-Instance:** `init --multi` creates `template/` + `instances/` structure. `spawn --user` creates per-user isolated instances with shared template files.
@@ -120,7 +123,7 @@ Look for `.claw-farm.json` in the project root:
 {
   "name": "project-name",
   "runtime": "openclaw" or "picoclaw",
-  "proxyMode": "per-instance" or "shared",
+  "proxyMode": "per-instance" or "shared" or "none",
   "processor": "builtin" or "mem0",
   "port": 18789,
   "createdAt": "2026-03-20T...",
@@ -185,6 +188,7 @@ When working in a project managed by claw-farm, check `.claw-farm.json` for `run
 - **runtime: "picoclaw"** — Use `picoclaw/` paths. Config is single `config.json`. Memory at `workspace/memory/MEMORY.md`. Sessions at `workspace/sessions/`.
 - **proxyMode: "per-instance"** — Each instance has its own api-proxy. Secrets are isolated per user.
 - **proxyMode: "shared"** — All instances share one api-proxy. Same API key for all. Do not store per-user secrets in the proxy.
+- **proxyMode: "none"** — No api-proxy deployed. Project handles proxying internally (e.g., integrated into its own TS server). `init`/`upgrade` skip api-proxy file generation, `up`/`down` skip proxy container logic.
 
 ### Security rules
 1. **API keys are NOT in your environment.** They're in the api-proxy container. Don't look for them.
@@ -199,6 +203,15 @@ claw-farm init project-name --existing --processor mem0
 claw-farm up project-name
 claw-farm down project-name
 ```
+
+### Claude Code Skills
+
+claw-farm provides two Claude Code skills in `.claude/skills/` for AI agent integration:
+
+- **`/claw-farm-cli`** — CLI command reference. Auto-triggers on claw-farm, openclaw, picoclaw, spawn, despawn keywords.
+- **`/claw-farm-code`** — Codebase guide for working inside managed projects. Auto-triggers on .claw-farm.json, SOUL.md, MEMORY.md, workspace keywords.
+
+To use in other projects: copy `.claude/skills/claw-farm-cli/` and/or `.claude/skills/claw-farm-code/` to the target project's `.claude/skills/`, or to `~/.claude/skills/` for global availability.
 
 ### If you change the architecture
 **You MUST update `docs/ARCHITECTURE.md` first**, then sync other docs. See the "Documentation Sync Rule" at the top.

@@ -7,7 +7,7 @@
 import type { LlmProvider } from "../lib/config.ts";
 
 export type RuntimeType = "openclaw" | "picoclaw";
-export type ProxyMode = "shared" | "per-instance";
+export type ProxyMode = "shared" | "per-instance" | "none";
 
 export interface AgentRuntime {
   /** Runtime identifier */

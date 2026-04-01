@@ -45,6 +45,7 @@ Runtimes:
 Proxy modes (--proxy-mode):
   per-instance   Each instance gets its own api-proxy (default for openclaw)
   shared         All instances share one api-proxy (default for picoclaw)
+  none           No api-proxy — project handles proxying internally
 
 Spawn options:
   --context k=v k2=v2   Fill USER.template.md placeholders (space-separated)

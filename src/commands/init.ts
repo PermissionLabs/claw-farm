@@ -73,14 +73,14 @@ export async function initCommand(args: string[]): Promise<void> {
   const runtime = getRuntime(runtimeType);
 
   // Parse --proxy-mode flag
-  const VALID_PROXY_MODES = ["shared", "per-instance"] as const;
+  const VALID_PROXY_MODES = ["shared", "per-instance", "none"] as const;
   const proxyModeIdx = args.indexOf("--proxy-mode");
   const proxyModeArg = proxyModeIdx !== -1 ? args[proxyModeIdx + 1] : undefined;
   if (proxyModeIdx !== -1 && (!proxyModeArg || proxyModeArg.startsWith("-"))) {
     console.error(`Missing value for --proxy-mode. Must be one of: ${VALID_PROXY_MODES.join(", ")}`);
     process.exit(1);
   }
-  const proxyMode = (proxyModeArg as "shared" | "per-instance") ?? runtime.defaultProxyMode;
+  const proxyMode = (proxyModeArg as "shared" | "per-instance" | "none") ?? runtime.defaultProxyMode;
   if (proxyModeIdx !== -1 && !(VALID_PROXY_MODES as readonly string[]).includes(proxyMode)) {
     console.error(`Invalid proxy mode: "${proxyMode}". Must be one of: ${VALID_PROXY_MODES.join(", ")}`);
     process.exit(1);
@@ -154,13 +154,17 @@ export async function initCommand(args: string[]): Promise<void> {
     }
   }
 
-  // Write API Proxy sidecar (key isolation + PII filter)
-  const proxyDir = join(projectDir, "api-proxy");
-  await mkdir(proxyDir, { recursive: true });
-  await Bun.write(join(proxyDir, "api_proxy.py"), apiProxyServerTemplate());
-  await Bun.write(join(proxyDir, "Dockerfile"), apiProxyDockerfileTemplate());
-  await Bun.write(join(proxyDir, "requirements.txt"), apiProxyRequirementsTemplate());
-  console.log("✓ Generated api-proxy/ (key isolation + PII filter)");
+  // Write API Proxy sidecar (key isolation + PII filter) — skip if proxyMode=none
+  if (proxyMode !== "none") {
+    const proxyDir = join(projectDir, "api-proxy");
+    await mkdir(proxyDir, { recursive: true });
+    await Bun.write(join(proxyDir, "api_proxy.py"), apiProxyServerTemplate());
+    await Bun.write(join(proxyDir, "Dockerfile"), apiProxyDockerfileTemplate());
+    await Bun.write(join(proxyDir, "requirements.txt"), apiProxyRequirementsTemplate());
+    console.log("✓ Generated api-proxy/ (key isolation + PII filter)");
+  } else {
+    console.log("✓ Skipped api-proxy/ (proxyMode: none)");
+  }
 
   // Write SOUL.md
   await Bun.write(
@@ -188,6 +192,7 @@ export async function initCommand(args: string[]): Promise<void> {
     createdAt: entry.createdAt,
     llm,
     ...(runtimeType !== "openclaw" ? { runtime: runtimeType } : {}),
+    ...(proxyMode !== "per-instance" ? { proxyMode } : {}),
   });
   console.log("✓ Generated .claw-farm.json");
 
@@ -219,7 +224,7 @@ async function registerExisting(
   processor: "builtin" | "mem0",
   llm: LlmProvider = "gemini",
   runtimeType: RuntimeType = "openclaw",
-  proxyMode: "shared" | "per-instance" = "per-instance",
+  proxyMode: "shared" | "per-instance" | "none" = "per-instance",
 ): Promise<void> {
   const runtime = getRuntime(runtimeType);
   const rtDir = runtime.runtimeDirName;
@@ -271,17 +276,21 @@ async function registerExisting(
     }
   }
 
-  // Add api-proxy if missing
-  const proxyDir = join(projectDir, "api-proxy");
-  try {
-    await Bun.file(join(proxyDir, "api_proxy.py")).text();
-    console.log("✓ api-proxy/ already exists — skipped");
-  } catch {
-    await mkdir(proxyDir, { recursive: true });
-    await Bun.write(join(proxyDir, "api_proxy.py"), apiProxyServerTemplate());
-    await Bun.write(join(proxyDir, "Dockerfile"), apiProxyDockerfileTemplate());
-    await Bun.write(join(proxyDir, "requirements.txt"), apiProxyRequirementsTemplate());
-    console.log("✓ Generated api-proxy/ (key isolation + PII filter)");
+  // Add api-proxy if missing — skip if proxyMode=none
+  if (proxyMode !== "none") {
+    const proxyDir = join(projectDir, "api-proxy");
+    try {
+      await Bun.file(join(proxyDir, "api_proxy.py")).text();
+      console.log("✓ api-proxy/ already exists — skipped");
+    } catch {
+      await mkdir(proxyDir, { recursive: true });
+      await Bun.write(join(proxyDir, "api_proxy.py"), apiProxyServerTemplate());
+      await Bun.write(join(proxyDir, "Dockerfile"), apiProxyDockerfileTemplate());
+      await Bun.write(join(proxyDir, "requirements.txt"), apiProxyRequirementsTemplate());
+      console.log("✓ Generated api-proxy/ (key isolation + PII filter)");
+    }
+  } else {
+    console.log("✓ Skipped api-proxy/ (proxyMode: none)");
   }
 
   // Ensure .env.example exists
@@ -317,6 +326,7 @@ async function registerExisting(
     createdAt: entry.createdAt,
     llm,
     ...(runtimeType !== "openclaw" ? { runtime: runtimeType } : {}),
+    ...(proxyMode !== "per-instance" ? { proxyMode } : {}),
   });
 
   console.log(`✓ Registered in global registry (port: ${entry.port})`);
@@ -336,7 +346,7 @@ async function initMulti(
   processor: "builtin" | "mem0",
   llm: LlmProvider = "gemini",
   runtimeType: RuntimeType = "openclaw",
-  proxyMode: "shared" | "per-instance" = "per-instance",
+  proxyMode: "shared" | "per-instance" | "none" = "per-instance",
 ): Promise<void> {
   const runtime = getRuntime(runtimeType);
 
@@ -395,13 +405,17 @@ async function initMulti(
     }
   }
 
-  // Write API Proxy sidecar
-  const proxyDir = join(projectDir, "api-proxy");
-  await mkdir(proxyDir, { recursive: true });
-  await Bun.write(join(proxyDir, "api_proxy.py"), apiProxyServerTemplate());
-  await Bun.write(join(proxyDir, "Dockerfile"), apiProxyDockerfileTemplate());
-  await Bun.write(join(proxyDir, "requirements.txt"), apiProxyRequirementsTemplate());
-  console.log("✓ Generated api-proxy/ (key isolation + PII filter)");
+  // Write API Proxy sidecar — skip if proxyMode=none
+  if (proxyMode !== "none") {
+    const proxyDir = join(projectDir, "api-proxy");
+    await mkdir(proxyDir, { recursive: true });
+    await Bun.write(join(proxyDir, "api_proxy.py"), apiProxyServerTemplate());
+    await Bun.write(join(proxyDir, "Dockerfile"), apiProxyDockerfileTemplate());
+    await Bun.write(join(proxyDir, "requirements.txt"), apiProxyRequirementsTemplate());
+    console.log("✓ Generated api-proxy/ (key isolation + PII filter)");
+  } else {
+    console.log("✓ Skipped api-proxy/ (proxyMode: none)");
+  }
 
   // Write .env.example
   await Bun.write(join(projectDir, ".env.example"), envExampleTemplate(llm, processor));
