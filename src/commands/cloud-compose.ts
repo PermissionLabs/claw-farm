@@ -35,6 +35,7 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
     name: string;
     port: number;
     containerName: string;
+    proxyMode: string;
   }> = [];
 
   // Shared networks for cloud isolation
@@ -49,21 +50,29 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
     const { runtimeType, proxyMode } = resolveRuntimeConfig(config, entry);
     const ports = portRange(entry.port);
     const proxyNet = `${name}-proxy-net`;
-    usedNetworks.add(proxyNet);
+    const agentNet = `${name}-agent-net`;
+    const hasProxy = proxyMode !== "none";
+    // proxy-net for projects with proxy; agent-net (internal) for proxyMode=none
+    if (hasProxy) {
+      usedNetworks.add(proxyNet);
+    } else {
+      usedNetworks.add(agentNet);
+    }
     const containerName = runtimeType === "picoclaw" ? `${name}-picoclaw` : `${name}-openclaw`;
     const gatewayPort = runtimeType === "picoclaw" ? 18790 : ports.openclaw;
     nginxProjects.push({
       name,
       port: gatewayPort,
       containerName,
+      proxyMode,
     });
 
     // API Proxy: proxy-net (internal, ↔ agent) + egress-net (outbound to LLM API)
     // Skip when proxyMode=none — project handles proxying internally
-    if (proxyMode !== "none") {
+    if (hasProxy) {
       usedNetworks.add("egress-net");
     }
-    if (proxyMode !== "none") services += `  ${name}-api-proxy:
+    if (hasProxy) services += `  ${name}-api-proxy:
     build: ./${name}/api-proxy
     expose:
       - "8080"
@@ -102,10 +111,9 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
 
 `;
 
-    // Agent gateway: proxy-net (internal only) — NO internet, NO port binding
-    // nginx proxies to it via proxy-net
-    const hasProxy = proxyMode !== "none";
-    const agentNetworks = hasProxy ? [proxyNet] : [];
+    // Agent gateway: internal network only — NO internet, NO port binding
+    // nginx proxies to it via proxy-net (with proxy) or agent-net (without proxy)
+    const agentNetworks = hasProxy ? [proxyNet] : [agentNet];
     const agentDeps: string[] = hasProxy
       ? [`      ${name}-api-proxy:\n        condition: service_healthy`]
       : [];
@@ -249,15 +257,13 @@ ${agentDeps.length > 0 ? `    depends_on:\n${agentDeps.join("\n")}` : ""}
     }
   }
 
-  // Nginx reverse proxy: public-net (port binding) + proxy-nets for projects with a proxy
+  // Nginx reverse proxy: public-net (port binding) + per-project internal networks
+  // proxy-net for projects with proxy, agent-net for proxyMode=none
   const nginxNetworks = [
     "public-net",
-    ...names
-      .filter((n) => {
-        const cfg = reg.projects[n];
-        return (cfg as { proxyMode?: string }).proxyMode !== "none";
-      })
-      .map((n) => `${n}-proxy-net`),
+    ...nginxProjects.map((p) =>
+      p.proxyMode !== "none" ? `${p.name}-proxy-net` : `${p.name}-agent-net`
+    ),
   ];
   const portMappings = nginxProjects
     .map((p) => `      - "${p.port}:${p.port}"`)
@@ -297,16 +303,17 @@ ${nginxProjects.map((p) => `      ${p.containerName}:\n        condition: servic
   if (usedNetworks.has("egress-net")) {
     networks += "  egress-net:\n    # api-proxy outbound to Gemini API\n";
   }
-  for (const name of names) {
-    const config = await readProjectConfig(reg.projects[name].path);
-    const projectProxyMode = config?.proxyMode ?? "per-instance";
-    const processor = config?.processor ?? reg.projects[name].processor;
-    if (projectProxyMode !== "none") {
-      networks += `  ${name}-proxy-net:\n    internal: true\n`;
+  for (const p of nginxProjects) {
+    const entry = reg.projects[p.name];
+    const processor = (await readProjectConfig(entry.path))?.processor ?? entry.processor;
+    if (p.proxyMode !== "none") {
+      networks += `  ${p.name}-proxy-net:\n    internal: true\n`;
+    } else {
+      networks += `  ${p.name}-agent-net:\n    internal: true\n`;
     }
     if (processor === "mem0") {
-      networks += `  ${name}-frontend:\n    internal: true\n`;
-      networks += `  ${name}-backend:\n    internal: true\n`;
+      networks += `  ${p.name}-frontend:\n    internal: true\n`;
+      networks += `  ${p.name}-backend:\n    internal: true\n`;
     }
   }
 
