@@ -537,6 +537,7 @@ The `--proxy-mode` flag controls how `api-proxy` is deployed across instances.
 ```bash
 claw-farm init my-agent --runtime picoclaw --proxy-mode shared
 claw-farm init my-agent --runtime picoclaw --proxy-mode per-instance  # default
+claw-farm init my-agent --runtime picoclaw --proxy-mode none
 ```
 
 ### per-instance (default)
@@ -564,6 +565,19 @@ instances/bob/    →  bob-agent   ──→ shared-api-proxy
 - Lower resource usage (one proxy total)
 - All instances use the same API key
 - Cannot isolate per-user secrets (see docs/SECURITY.md)
+
+### none
+
+No api-proxy is deployed. The project handles proxying internally.
+
+```
+instances/alice/  →  alice-agent ──→ (external / self-managed proxy)
+instances/bob/    →  bob-agent   ──→ (external / self-managed proxy)
+```
+
+- No claw-farm proxy overhead
+- Project is responsible for its own API key management and PII filtering
+- Useful when the project already has a proxy or doesn't need one
 
 ## 10. picoclaw File Structure
 
@@ -677,3 +691,35 @@ dog-agent/
 ```
 
 **Note on picoclaw multi-agent:** picoclaw has a built-in multi-agent feature for defining agent roles (e.g., researcher, writer, reviewer) within a single instance. This is different from claw-farm's multi-instance model which provides per-user isolation. picoclaw's roles run inside one container; claw-farm's instances are separate containers with separate data.
+
+## 12. Claude Code Skills
+
+claw-farm ships two Claude Code skills in `.claude/skills/` that help AI agents work with claw-farm projects. These are auto-discovered by Claude Code when working in this repo or any project that includes them.
+
+```
+.claude/skills/
+├── claw-farm-cli/
+│   └── SKILL.md          ← CLI command reference (init, up, down, spawn, despawn, etc.)
+└── claw-farm-code/
+    └── SKILL.md          ← Codebase guide (file map, edit safety, security rules, memory architecture)
+```
+
+### `/claw-farm-cli` — CLI Reference Skill
+
+- **Trigger:** User or agent invokes `/claw-farm-cli`, or mentions claw-farm, openclaw, picoclaw, spawn, despawn
+- **Contents:** All commands with flags, runtime comparison, proxy modes, env vars, programmatic API
+- **Use case:** When an agent needs to run claw-farm commands (scaffolding, starting, stopping, managing instances)
+
+### `/claw-farm-code` — Codebase Guide Skill
+
+- **Trigger:** User or agent invokes `/claw-farm-code`, or works with .claw-farm.json, SOUL.md, MEMORY.md, workspace files
+- **Contents:** File maps (single/multi, openclaw/picoclaw), edit safety table, security rules, memory layers, config merging
+- **Use case:** When an agent is working inside a claw-farm-managed project (editing SOUL.md, adding skills, understanding structure)
+
+### Using Skills in Other Projects
+
+Skills can be made available to other projects in three ways:
+
+1. **Copy to project:** Copy `.claude/skills/claw-farm-cli/` and/or `.claude/skills/claw-farm-code/` into the target project's `.claude/skills/`
+2. **Personal skills:** Copy to `~/.claude/skills/` for availability in all projects
+3. **Plugin distribution:** Package as a Claude Code plugin for team-wide distribution

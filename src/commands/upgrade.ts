@@ -257,12 +257,18 @@ export async function upgradeCommand(args: string[]): Promise<void> {
     }
   }
 
-  const proxyDir = join(projectDir, "api-proxy");
-  await mkdir(proxyDir, { recursive: true });
-  await Bun.write(join(proxyDir, "api_proxy.py"), apiProxyServerTemplate());
-  await Bun.write(join(proxyDir, "Dockerfile"), apiProxyDockerfileTemplate());
-  await Bun.write(join(proxyDir, "requirements.txt"), apiProxyRequirementsTemplate());
-  console.log("✓ Updated api-proxy/ (key isolation + PII filter + secret scan)");
+  // Update api-proxy — skip if proxyMode=none
+  const proxyMode: ProxyMode = config?.proxyMode ?? runtime.defaultProxyMode;
+  if (proxyMode !== "none") {
+    const proxyDir = join(projectDir, "api-proxy");
+    await mkdir(proxyDir, { recursive: true });
+    await Bun.write(join(proxyDir, "api_proxy.py"), apiProxyServerTemplate());
+    await Bun.write(join(proxyDir, "Dockerfile"), apiProxyDockerfileTemplate());
+    await Bun.write(join(proxyDir, "requirements.txt"), apiProxyRequirementsTemplate());
+    console.log("✓ Updated api-proxy/ (key isolation + PII filter + secret scan)");
+  } else {
+    console.log("✓ Skipped api-proxy/ (proxyMode: none)");
+  }
 
   await Bun.write(join(projectDir, ".env.example"), envExampleTemplate(llm, processor));
   console.log("✓ Updated .env.example");
@@ -329,12 +335,17 @@ async function upgradeMultiInstance(
     }
   }
 
-  const proxyDir = join(projectDir, "api-proxy");
-  await mkdir(proxyDir, { recursive: true });
-  await Bun.write(join(proxyDir, "api_proxy.py"), apiProxyServerTemplate());
-  await Bun.write(join(proxyDir, "Dockerfile"), apiProxyDockerfileTemplate());
-  await Bun.write(join(proxyDir, "requirements.txt"), apiProxyRequirementsTemplate());
-  console.log("✓ Updated api-proxy/ (key isolation + PII filter + secret scan)");
+  // Update api-proxy — skip if proxyMode=none
+  if (proxyMode !== "none") {
+    const proxyDir = join(projectDir, "api-proxy");
+    await mkdir(proxyDir, { recursive: true });
+    await Bun.write(join(proxyDir, "api_proxy.py"), apiProxyServerTemplate());
+    await Bun.write(join(proxyDir, "Dockerfile"), apiProxyDockerfileTemplate());
+    await Bun.write(join(proxyDir, "requirements.txt"), apiProxyRequirementsTemplate());
+    console.log("✓ Updated api-proxy/ (key isolation + PII filter + secret scan)");
+  } else {
+    console.log("✓ Skipped api-proxy/ (proxyMode: none)");
+  }
 
   await Bun.write(join(projectDir, ".env.example"), envExampleTemplate(llm, processor));
   console.log("✓ Updated .env.example");

@@ -535,6 +535,7 @@ claw-farm init my-agent --runtime picoclaw       # 경량: picoclaw
 ```bash
 claw-farm init my-agent --runtime picoclaw --proxy-mode shared
 claw-farm init my-agent --runtime picoclaw --proxy-mode per-instance  # 기본값
+claw-farm init my-agent --runtime picoclaw --proxy-mode none
 ```
 
 ### per-instance (기본값)
@@ -562,6 +563,19 @@ instances/bob/    →  bob-agent   ──→ shared-api-proxy
 - 리소스 사용량 낮음 (프록시 하나)
 - 모든 인스턴스가 동일한 API 키 사용
 - 유저별 시크릿 격리 불가 (docs/SECURITY.md 참조)
+
+### none
+
+api-proxy 없음 — 프로젝트가 자체적으로 프록시 처리.
+
+```
+instances/alice/  →  alice-agent ──→ (외부 / 자체 관리 프록시)
+instances/bob/    →  bob-agent   ──→ (외부 / 자체 관리 프록시)
+```
+
+- claw-farm 프록시 오버헤드 없음
+- 프로젝트가 자체적으로 API 키 관리 및 PII 필터링 담당
+- 프로젝트에 이미 프록시가 있거나 필요 없는 경우 유용
 
 ## 10. picoclaw 파일 구조
 
@@ -675,3 +689,35 @@ dog-agent/
 ```
 
 **picoclaw 멀티 에이전트 참고:** picoclaw에는 단일 인스턴스 내에서 에이전트 역할(예: 연구자, 작성자, 리뷰어)을 정의하는 내장 멀티 에이전트 기능이 있습니다. 이것은 유저별 격리를 제공하는 claw-farm의 멀티 인스턴스 모델과 다릅니다. picoclaw의 역할은 하나의 컨테이너 안에서 실행되고, claw-farm의 인스턴스는 별도의 데이터를 가진 별도의 컨테이너입니다.
+
+## 12. Claude Code 스킬
+
+claw-farm은 `.claude/skills/`에 두 개의 Claude Code 스킬을 제공합니다. AI 에이전트가 claw-farm 프로젝트를 다룰 때 자동으로 로드됩니다.
+
+```
+.claude/skills/
+├── claw-farm-cli/
+│   └── SKILL.md          ← CLI 명령어 레퍼런스 (init, up, down, spawn, despawn 등)
+└── claw-farm-code/
+    └── SKILL.md          ← 코드베이스 가이드 (파일 맵, 편집 안전성, 보안 규칙, 메모리 아키텍처)
+```
+
+### `/claw-farm-cli` — CLI 레퍼런스 스킬
+
+- **트리거:** 유저 또는 에이전트가 `/claw-farm-cli` 호출, 또는 claw-farm, openclaw, picoclaw, spawn, despawn 키워드 언급
+- **내용:** 모든 명령어와 플래그, 런타임 비교, 프록시 모드, 환경 변수, 프로그래밍 API
+- **용도:** 에이전트가 claw-farm 명령어를 실행해야 할 때 (스캐폴딩, 시작, 중지, 인스턴스 관리)
+
+### `/claw-farm-code` — 코드베이스 가이드 스킬
+
+- **트리거:** 유저 또는 에이전트가 `/claw-farm-code` 호출, 또는 .claw-farm.json, SOUL.md, MEMORY.md, workspace 파일 작업 시
+- **내용:** 파일 맵 (싱글/멀티, openclaw/picoclaw), 편집 안전성 테이블, 보안 규칙, 메모리 레이어, 설정 머지 동작
+- **용도:** claw-farm 관리 프로젝트 내에서 작업할 때 (SOUL.md 편집, 스킬 추가, 구조 파악)
+
+### 다른 프로젝트에서 스킬 사용하기
+
+스킬은 세 가지 방법으로 다른 프로젝트에서 사용할 수 있습니다:
+
+1. **프로젝트에 복사:** `.claude/skills/claw-farm-cli/`와 `.claude/skills/claw-farm-code/`를 대상 프로젝트의 `.claude/skills/`에 복사
+2. **개인 스킬:** `~/.claude/skills/`에 복사하면 모든 프로젝트에서 사용 가능
+3. **플러그인 배포:** Claude Code 플러그인으로 패키징하여 팀 전체에 배포
