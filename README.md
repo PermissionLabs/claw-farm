@@ -222,6 +222,41 @@ claw-farm ships two [Claude Code skills](https://docs.anthropic.com/en/docs/clau
 
 **Use in other projects:** Copy `.claude/skills/claw-farm-cli/` and/or `.claude/skills/claw-farm-code/` to your project's `.claude/skills/`, or to `~/.claude/skills/` for global availability.
 
+## SDK (Security Modules)
+
+claw-farm includes TS-native security modules for projects that integrate the LLM proxy into their own server (`proxyMode: "none"`). These are the same guards as the Python api-proxy container, but importable as TypeScript.
+
+```typescript
+import {
+  createLlmProxy, gemini, piiRedactor, secretScanner, auditLogger,
+  defaultPatterns,
+} from "@permissionlabs/claw-farm/security";
+
+// Full pipeline
+const { proxy } = createLlmProxy({
+  provider: gemini({ apiKey: process.env.GEMINI_API_KEY! }),
+  pipeline: [
+    piiRedactor({ mode: "redact", patterns: defaultPatterns }),
+    secretScanner(),
+    auditLogger({ path: "/logs/audit.jsonl" }),
+  ],
+});
+
+// Standalone usage
+import { redactPii } from "@permissionlabs/claw-farm/security";
+const { text, findings } = redactPii("Input with 900101-1234567");
+
+// Custom PII patterns
+import { koreanPatterns } from "@permissionlabs/claw-farm/security/patterns";
+const result = redactPii(input, { patterns: [koreanPatterns, myCustomPatterns] });
+
+// Custom LLM provider
+import { openaiCompat } from "@permissionlabs/claw-farm/security/providers";
+const provider = openaiCompat({ apiKey: "sk-...", baseUrl: "https://my-llm.example.com" });
+```
+
+Each module works standalone or as composable middleware in the proxy pipeline.
+
 ## Documentation
 
 | Document | Contents |

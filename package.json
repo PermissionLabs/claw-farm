@@ -4,7 +4,10 @@
   "description": "Multi OpenClaw instance manager — scaffold, run, and deploy AI agents with persistent memory",
   "type": "module",
   "exports": {
-    ".": "./src/lib/api.ts"
+    ".": "./src/lib/api.ts",
+    "./security": "./src/sdk/index.ts",
+    "./security/patterns": "./src/sdk/patterns/index.ts",
+    "./security/providers": "./src/sdk/providers/index.ts"
   },
   "bin": {
     "claw-farm": "./src/index.ts"

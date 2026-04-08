@@ -726,3 +726,101 @@ Skills can be made available to other projects in three ways:
 1. **Copy to project:** Copy `.claude/skills/claw-farm-cli/` and/or `.claude/skills/claw-farm-code/` into the target project's `.claude/skills/`
 2. **Personal skills:** Copy to `~/.claude/skills/` for availability in all projects
 3. **Plugin distribution:** Package as a Claude Code plugin for team-wide distribution
+
+## 13. SDK Layer (Security Modules)
+
+TS-native security modules that can be imported directly by projects using `proxyMode: "none"` (integrated proxy). These implement the same guards as the Python api-proxy container.
+
+### File Structure
+
+```
+src/sdk/
+├── index.ts                    # Barrel export (@permissionlabs/claw-farm/security)
+├── types.ts                    # Shared interfaces
+│                                 Finding, PiiPattern, PiiPatternGroup, SecretPatternGroup,
+│                                 LlmProvider, ProxyContext, ProxyResponse, RequestMiddleware
+├── pii-redactor.ts             # PII detection + redaction
+│                                 redactPii()          — standalone function
+│                                 redactRequestBody()  — JSON body walker
+│                                 piiRedactor()        — middleware factory
+├── secret-scanner.ts           # Secret detection + stripping
+│                                 scanSecrets()        — standalone function
+│                                 scanResponseBody()   — JSON/text body walker
+│                                 secretScanner()      — middleware factory
+├── audit-logger.ts             # JSONL audit logging
+│                                 createAuditLogger()  — standalone factory
+│                                 auditLogger()        — middleware factory
+├── llm-proxy.ts                # Pipeline engine
+│                                 createLlmProxy()     — compose middleware + upstream fetch
+├── patterns/                   # PII pattern groups (extensible registry)
+│   ├── index.ts                # defaultPatterns = korean + us + financial + universal
+│   ├── korean.ts               # 8 patterns: RRN, phone variants, landline, biz reg, passport, driver license
+│   ├── us.ts                   # 2 patterns: SSN, phone
+│   └── financial.ts            # 2 patterns: credit card, formatted card
+└── providers/                  # LLM provider factories (extensible)
+    ├── index.ts                # Built-in exports
+    ├── types.ts                # LlmProvider interface
+    ├── gemini.ts               # Gemini (disableThinking option)
+    ├── anthropic.ts            # Anthropic (auto anthropic-version header)
+    ├── openrouter.ts           # OpenRouter (Bearer auth, referer/title)
+    └── openai-compat.ts        # OpenAI-compatible (custom baseUrl)
+```
+
+### Middleware Pipeline (Onion Model)
+
+```
+Request → [piiRedactor] → [customMiddleware] → [secretScanner] → [auditLogger] → upstream fetch
+                                                                                       │
+Response ← [piiRedactor] ← [customMiddleware] ← [secretScanner] ← [auditLogger] ← ───┘
+```
+
+Each middleware receives `(ctx, next)`. Calling `next()` passes control to the next middleware. After `next()` resolves, the middleware can inspect/modify the response (onion model).
+
+Built-in security guards (path traversal, prefix validation, content size, header/query filtering) are applied by the engine itself — not as middleware — so they cannot be accidentally removed.
+
+### Relationship to Python api-proxy
+
+| Deployment | Proxy mechanism | When to use |
+|------------|----------------|-------------|
+| `proxyMode: "per-instance"` / `"shared"` | Python api-proxy container | Standalone deployments, simple setups |
+| `proxyMode: "none"` | SDK imported into your TS server | Service-oriented projects with custom server |
+
+Both implement the same security guards (PII redaction, secret scanning, audit logging, path validation). The SDK version is composable via middleware and extensible via custom patterns/providers.
+
+### Extending
+
+**Custom PII patterns:**
+```typescript
+const jpPatterns: PiiPatternGroup = {
+  name: "japanese",
+  patterns: [
+    { name: "MY_NUMBER", regex: /\d{4}\s\d{4}\s\d{4}/g, replacement: "[REDACTED_MY_NUMBER]" },
+  ],
+};
+redactPii(text, { patterns: [...defaultPatterns, jpPatterns] });
+```
+
+**Custom LLM provider:**
+```typescript
+const groq: LlmProvider = {
+  name: "groq",
+  baseUrl: "https://api.groq.com/openai",
+  authHeader: "authorization",
+  authValue: `Bearer ${apiKey}`,
+  pathPrefixes: ["v1/"],
+  queryAllowlist: new Set(),
+};
+```
+
+**Custom middleware:**
+```typescript
+function myTransformer(): RequestMiddleware {
+  return async (ctx, next) => {
+    // Transform request before upstream
+    ctx.body = transform(ctx.body);
+    const response = await next();
+    // Inspect/modify response after upstream
+    return response;
+  };
+}
+```

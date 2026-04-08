@@ -1,0 +1,227 @@
+// LLM Proxy pipeline engine — Koa-style onion middleware model
+
+import { createHash } from "node:crypto";
+import { piiRedactor } from "./pii-redactor.ts";
+import { secretScanner } from "./secret-scanner.ts";
+import type {
+  LlmProxyOptions,
+  ProxyContext,
+  ProxyRequest,
+  ProxyResponse,
+  RequestMiddleware,
+} from "./types.ts";
+
+const DEFAULT_FORWARD_HEADERS = new Set([
+  "content-type",
+  "accept",
+  "accept-encoding",
+  "user-agent",
+]);
+
+const DEFAULT_TIMEOUT = 120_000;
+const DEFAULT_MAX_SIZE_MB = 5;
+
+const noopLogger = {
+  info: () => {},
+  error: () => {},
+  warn: () => {},
+};
+
+/**
+ * Create an LLM proxy with a composable middleware pipeline.
+ *
+ * Built-in security guards (path traversal, prefix validation, header/query filtering)
+ * are applied by the engine itself — they are not middleware, so they cannot be skipped.
+ *
+ * Default pipeline (when none specified): [piiRedactor(), secretScanner()]
+ */
+export function createLlmProxy(options: LlmProxyOptions) {
+  const {
+    provider,
+    logger = noopLogger,
+    timeout = DEFAULT_TIMEOUT,
+    maxSizeMb = DEFAULT_MAX_SIZE_MB,
+    forwardHeaders = DEFAULT_FORWARD_HEADERS,
+  } = options;
+
+  const pipeline: RequestMiddleware[] =
+    options.pipeline ?? [piiRedactor(), secretScanner()];
+
+  async function proxy(request: ProxyRequest): Promise<ProxyResponse> {
+    const { method, path, queryString, headers: incomingHeaders, body: rawBody } = request;
+
+    // --- Built-in guard: path traversal + prefix validation ---
+    if (
+      path.includes("..") ||
+      !provider.pathPrefixes.some((p) => path.startsWith(p))
+    ) {
+      return {
+        status: 403,
+        headers: { "content-type": "application/json" },
+        body: Buffer.from(JSON.stringify({ error: "Path not allowed" })),
+      };
+    }
+
+    // --- Built-in guard: content size ---
+    if (rawBody.length > maxSizeMb * 1024 * 1024) {
+      return {
+        status: 413,
+        headers: { "content-type": "application/json" },
+        body: Buffer.from(JSON.stringify({ error: "Request too large" })),
+      };
+    }
+
+    // --- Build context ---
+    const ctx: ProxyContext = {
+      method,
+      path,
+      queryString,
+      headers: { ...incomingHeaders },
+      body: rawBody,
+      provider,
+      sourceIp: request.sourceIp,
+      state: new Map(),
+    };
+
+    // Content hash for audit trail
+    const contentHash =
+      rawBody.length > 0
+        ? createHash("sha256").update(rawBody).digest("hex").slice(0, 16)
+        : "empty";
+    ctx.state.set("contentHash", contentHash);
+
+    // --- Upstream fetch function (innermost layer of the onion) ---
+    async function upstreamFetch(): Promise<ProxyResponse> {
+      // Apply provider transformRequest if defined
+      let body = ctx.body;
+      if (provider.transformRequest) {
+        try {
+          const data = JSON.parse(body.toString("utf-8")) as Record<string, unknown>;
+          const transformed = provider.transformRequest(data);
+          body = Buffer.from(JSON.stringify(transformed), "utf-8");
+        } catch {
+          // Non-JSON body, skip transform
+        }
+      }
+
+      // Build upstream URL
+      let upstreamUrl = `${provider.baseUrl}/${path}`;
+
+      // Query string allowlist
+      if (queryString) {
+        const params = new URLSearchParams(queryString);
+        const filtered: string[] = [];
+        for (const [k, v] of params) {
+          if (provider.queryAllowlist.has(k)) {
+            filtered.push(
+              `${encodeURIComponent(k)}=${encodeURIComponent(v)}`,
+            );
+          }
+        }
+        if (filtered.length > 0) {
+          upstreamUrl += `?${filtered.join("&")}`;
+        }
+      }
+
+      // Forward only safe headers
+      const fetchHeaders: Record<string, string> = {};
+      for (const [k, v] of Object.entries(ctx.headers)) {
+        if (forwardHeaders.has(k.toLowerCase())) {
+          fetchHeaders[k] = v;
+        }
+      }
+
+      // Inject API key
+      if (provider.authValue) {
+        fetchHeaders[provider.authHeader] = provider.authValue;
+      }
+
+      // Inject extra headers
+      if (provider.extraHeaders) {
+        for (const [k, v] of Object.entries(provider.extraHeaders)) {
+          fetchHeaders[k] = v;
+        }
+      }
+
+      // Fetch upstream
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+
+      let response: Response;
+      try {
+        response = await fetch(upstreamUrl, {
+          method,
+          headers: fetchHeaders,
+          body:
+            method !== "GET" && method !== "HEAD"
+              ? new Uint8Array(body)
+              : undefined,
+          signal: controller.signal,
+        });
+      } catch (err) {
+        clearTimeout(timer);
+        logger.error("Upstream fetch failed", err);
+        return {
+          status: 502,
+          headers: { "content-type": "application/json" },
+          body: Buffer.from(
+            JSON.stringify({ error: "Upstream request failed" }),
+          ),
+        };
+      }
+
+      clearTimeout(timer);
+
+      // Apply provider transformResponse if defined
+      let responseBody = Buffer.from(
+        new Uint8Array(await response.arrayBuffer()),
+      );
+      if (provider.transformResponse) {
+        try {
+          const data = JSON.parse(responseBody.toString("utf-8")) as Record<string, unknown>;
+          const transformed = provider.transformResponse(data);
+          responseBody = Buffer.from(JSON.stringify(transformed), "utf-8");
+        } catch {
+          // Non-JSON response, skip transform
+        }
+      }
+
+      // Forward response headers (skip hop-by-hop)
+      const skipHeaders = new Set([
+        "transfer-encoding",
+        "content-encoding",
+        "content-length",
+      ]);
+      const respHeaders: Record<string, string> = {};
+      response.headers.forEach((v, k) => {
+        if (!skipHeaders.has(k.toLowerCase())) {
+          respHeaders[k] = v;
+        }
+      });
+
+      return {
+        status: response.status,
+        headers: respHeaders,
+        body: responseBody,
+      };
+    }
+
+    // --- Compose middleware chain (onion model) ---
+    let index = 0;
+    function dispatch(): Promise<ProxyResponse> {
+      if (index < pipeline.length) {
+        const mw = pipeline[index++];
+        return mw(ctx, dispatch);
+      }
+      return upstreamFetch();
+    }
+
+    return dispatch();
+  }
+
+  function close() {
+    // Reserved for future cleanup (connection pools, etc.)
+  }
+
+  return { proxy, close };
+}
