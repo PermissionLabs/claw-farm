@@ -45,6 +45,11 @@ claw-farm CLI
   ├── processors/      # interface, builtin (MEMORY.md), mem0 (Qdrant)
   ├── runtimes/        # interface, openclaw (~1.5GB), picoclaw (~20MB Go)
   ├── templates/       # docker-compose, docker-compose.instance, docker-compose.mem0, USER.template, openclaw.json, SOUL.md, policy.yaml, api-proxy, nginx-proxy
+  ├── sdk/             # Security SDK (TS-native alternative to Python api-proxy)
+  │     ├── pii-redactor, secret-scanner, audit-logger   # Standalone + middleware
+  │     ├── llm-proxy         # Pipeline engine (Koa-style onion middleware)
+  │     ├── patterns/         # PII pattern groups (korean, us, financial, universal)
+  │     └── providers/        # LLM providers (gemini, anthropic, openrouter, openai-compat)
   └── .claude/skills/  # Claude Code skills for AI agent integration
         ├── claw-farm-cli/   # CLI command reference (all commands, flags, runtime comparison)
         └── claw-farm-code/  # Codebase guide (file map, edit safety, security rules, memory arch)
@@ -88,6 +93,24 @@ bun install              # Install dev deps (bun-types, typescript)
 bun run typecheck        # tsc --noEmit
 bun run src/index.ts     # Run CLI
 ```
+
+## SDK (Security Modules)
+
+TS-native security modules for projects using `proxyMode: "none"` or integrated proxy patterns. Alternative to the standalone Python api-proxy container.
+
+```bash
+# Import from your TS server
+import { createLlmProxy, gemini, piiRedactor, secretScanner, auditLogger } from "@permissionlabs/claw-farm/security";
+import { koreanPatterns } from "@permissionlabs/claw-farm/security/patterns";
+import { openaiCompat } from "@permissionlabs/claw-farm/security/providers";
+```
+
+**Subpath exports:**
+| Path | Contents |
+|------|----------|
+| `@permissionlabs/claw-farm/security` | All SDK exports (functions, middleware, providers, patterns, types) |
+| `@permissionlabs/claw-farm/security/patterns` | PII pattern groups only (korean, us, financial, universal) |
+| `@permissionlabs/claw-farm/security/providers` | LLM provider factories only (gemini, anthropic, openRouter, openaiCompat) |
 
 ## Global Registry
 
