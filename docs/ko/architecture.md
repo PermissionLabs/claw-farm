@@ -565,7 +565,7 @@ instances/bob/    →  bob-agent   ──→ shared-api-proxy
 
 - 리소스 사용량 낮음 (프록시 하나)
 - 모든 인스턴스가 동일한 API 키 사용
-- 유저별 시크릿 격리 불가 (docs/SECURITY.md 참조)
+- 유저별 시크릿 격리 불가 (docs/security.md 참조)
 
 ### none
 

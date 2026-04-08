@@ -2,7 +2,7 @@
 
 > Guide for converting existing OpenClaw projects to the picoclaw runtime.
 >
-> Korean version: [ko/MIGRATION.md](ko/MIGRATION.md)
+> Korean version: [ko/migration.md](ko/migration.md)
 
 ---
 

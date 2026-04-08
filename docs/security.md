@@ -2,7 +2,7 @@
 
 > Research as of 2026-03-20. Rationale document for claw-farm's security design.
 >
-> Korean version: [ko/SECURITY.md](ko/SECURITY.md)
+> Korean version: [ko/security.md](ko/security.md)
 
 ## Sources
 

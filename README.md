@@ -109,8 +109,8 @@ Each module works standalone or as composable middleware. See [SDK Guide](docs/s
 | [Getting Started](docs/getting-started.md) | Humans | Zero to production walkthrough |
 | [SDK Guide](docs/sdk-guide.md) | Humans + Agents | SDK integration, API reference, migration guide |
 | [Agent Integration](docs/agent-integration.md) | AI Agents | File rules, paths, editability, security constraints |
-| [Architecture](docs/ARCHITECTURE.md) | Humans + Agents | Full diagrams, container topology, data flow |
-| [Security](docs/SECURITY.md) | Humans | Threat model, hardening checklist |
+| [Architecture](docs/architecture.md) | Humans + Agents | Full diagrams, container topology, data flow |
+| [Security](docs/security.md) | Humans | Threat model, hardening checklist |
 | [Korean docs](docs/ko/) | Humans | Korean translations |
 
 ## License

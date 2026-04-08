@@ -8,24 +8,29 @@ Multi OpenClaw instance manager — scaffold, run, and deploy AI agents with per
 >
 > | Document | Role | When to update |
 > |----------|------|---------------|
-> | `docs/ARCHITECTURE.md` | **Architecture source of truth.** Diagrams, file structure, topology, data flow | Update **first** on any structural change |
-> | `docs/SECURITY.md` | Security design rationale, threat model, checklists | On security-related changes |
+> | `docs/architecture.md` | **Architecture source of truth.** Diagrams, file structure, topology, data flow | Update **first** on any structural change |
+> | `docs/security.md` | Security design rationale, threat model, checklists | On security-related changes |
 > | `README.md` | External user guide | On command/install/structure changes |
 > | `CLAUDE.md` (this file) | AI agent + developer instructions | On convention/rule changes |
 >
-> **`docs/ARCHITECTURE.md` is the single source of truth for architecture.** Other docs follow it. On conflict, ARCHITECTURE.md wins.
+> **`docs/architecture.md` is the single source of truth for architecture.** Other docs follow it. On conflict, architecture.md wins.
 >
 > ### Checklist: Adding a new command or template
 >
 > When you add a new CLI command (`src/commands/`) or template (`src/templates/`), you **MUST** update ALL of the following:
 >
-> 1. `docs/ARCHITECTURE.md` — Section 1 CLI diagram + any relevant sections
-> 2. `docs/ko/ARCHITECTURE.md` — Korean translation of the same changes
+> 1. `docs/architecture.md` — Section 1 CLI diagram + any relevant sections
+> 2. `docs/ko/architecture.md` — Korean translation of the same changes
 > 3. `CLAUDE.md` — Architecture summary tree AND Commands section
 > 4. `README.md` — Commands table
 > 5. `src/index.ts` — HELP text (already required for the code to work)
 >
 > **Missing even one of these is a bug.** Treat doc updates as part of the PR, not a follow-up.
+>
+> ### Documentation conventions
+>
+> 1. **Filenames are lowercase-kebab** — `architecture.md`, not `ARCHITECTURE.md`. All docs in `docs/` follow this rule.
+> 2. **Multi-language sync** — When you create or update an English doc in `docs/`, you MUST create or update the corresponding file in `docs/ko/` (Korean). Both versions must contain the same structure and content.
 
 ## Project Overview
 
@@ -36,7 +41,7 @@ Multi OpenClaw instance manager — scaffold, run, and deploy AI agents with per
 
 ## Architecture (summary)
 
-> Full diagrams: `docs/ARCHITECTURE.md`
+> Full diagrams: `docs/architecture.md`
 
 ```
 claw-farm CLI
@@ -127,8 +132,8 @@ import { openaiCompat } from "@permissionlabs/claw-farm/security/providers";
 
 | Document | Contents |
 |----------|----------|
-| `docs/ARCHITECTURE.md` | Full architecture diagrams (file structure, container topology, data flow, memory, onboarding) |
-| `docs/SECURITY.md` | OpenClaw security hardening guide (2026-03-20 research, 8 sources) |
+| `docs/architecture.md` | Full architecture diagrams (file structure, container topology, data flow, memory, onboarding) |
+| `docs/security.md` | OpenClaw security hardening guide (2026-03-20 research, 8 sources) |
 | `docs/ko/` | Korean translations of docs |
 | `README.md` | User guide (install, quickstart, command reference) |
 
@@ -138,7 +143,7 @@ import { openaiCompat } from "@permissionlabs/claw-farm/security/providers";
 
 If you're an AI agent working in a project that uses claw-farm (e.g., dog-agent, tamagochi), here's what you need to know.
 
-**Read `docs/ARCHITECTURE.md` first for full context.**
+**Read `docs/architecture.md` first for full context.**
 
 ### Check if this project is managed by claw-farm
 Look for `.claw-farm.json` in the project root:
@@ -237,4 +242,4 @@ claw-farm provides two Claude Code skills in `.claude/skills/` for AI agent inte
 To use in other projects: copy `.claude/skills/claw-farm-cli/` and/or `.claude/skills/claw-farm-code/` to the target project's `.claude/skills/`, or to `~/.claude/skills/` for global availability.
 
 ### If you change the architecture
-**You MUST update `docs/ARCHITECTURE.md` first**, then sync other docs. See the "Documentation Sync Rule" at the top.
+**You MUST update `docs/architecture.md` first**, then sync other docs. See the "Documentation Sync Rule" at the top.

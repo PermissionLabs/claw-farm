@@ -4,7 +4,7 @@
 > When the structure changes, update this document **first**.
 > CLAUDE.md and README.md reference this document.
 >
-> Korean version: [ko/ARCHITECTURE.md](ko/ARCHITECTURE.md)
+> Korean version: [ko/architecture.md](ko/architecture.md)
 
 ## 1. What the CLI Does
 
@@ -567,7 +567,7 @@ instances/bob/    →  bob-agent   ──→ shared-api-proxy
 
 - Lower resource usage (one proxy total)
 - All instances use the same API key
-- Cannot isolate per-user secrets (see docs/SECURITY.md)
+- Cannot isolate per-user secrets (see docs/security.md)
 
 ### none
 

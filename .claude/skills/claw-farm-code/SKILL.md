@@ -185,8 +185,8 @@ No api-proxy deployed. Project handles proxying internally. No claw-farm proxy o
 
 ## When You Change Architecture
 
-**You MUST update `docs/ARCHITECTURE.md` first**, then sync:
-- `docs/ko/ARCHITECTURE.md` (Korean translation)
+**You MUST update `docs/architecture.md` first**, then sync:
+- `docs/ko/architecture.md` (Korean translation)
 - `CLAUDE.md` (conventions)
 - `README.md` (user guide)
 - `src/index.ts` HELP text (if adding commands)

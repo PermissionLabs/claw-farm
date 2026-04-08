@@ -234,7 +234,7 @@ const { proxy } = createLlmProxy({
 });
 ```
 
-See [docs/SECURITY.md](SECURITY.md) for the full security hardening guide and threat model.
+See [docs/security.md](security.md) for the full security hardening guide and threat model.
 
 ---
 
@@ -322,9 +322,9 @@ claw-farm down --all
 
 | Document | What is in it |
 |----------|--------------|
-| [docs/ARCHITECTURE.md](ARCHITECTURE.md) | Full file structure diagrams, container topology, data flow, multi-instance architecture |
-| [docs/SECURITY.md](SECURITY.md) | Security hardening guide, threat model, PII/secret pattern reference |
+| [docs/architecture.md](architecture.md) | Full file structure diagrams, container topology, data flow, multi-instance architecture |
+| [docs/security.md](security.md) | Security hardening guide, threat model, PII/secret pattern reference |
 | [docs/sdk-guide.md](sdk-guide.md) | SDK integration for `proxyMode: none` — embedding security into your own TypeScript server |
 | [docs/ko/](ko/) | Korean translations of all docs |
 
-**For AI agents reading this doc:** after bootstrapping a project, read `.claw-farm.json` to determine the `runtime` and `proxyMode` in use, then refer to the file map in `docs/ARCHITECTURE.md` to find the correct paths for `SOUL.md`, `MEMORY.md`, and `config`. The `/claw-farm-code` Claude Code skill (in `.claude/skills/`) provides a compact reference for working inside managed projects.
+**For AI agents reading this doc:** after bootstrapping a project, read `.claw-farm.json` to determine the `runtime` and `proxyMode` in use, then refer to the file map in `docs/architecture.md` to find the correct paths for `SOUL.md`, `MEMORY.md`, and `config`. The `/claw-farm-code` Claude Code skill (in `.claude/skills/`) provides a compact reference for working inside managed projects.
