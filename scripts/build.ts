@@ -40,7 +40,7 @@ const [results, tsc] = await Promise.all([
       }),
     ),
   ),
-  $`./node_modules/.bin/tsc -p tsconfig.build.json`.quiet().nothrow(),
+  $`bunx tsc -p tsconfig.build.json`.quiet().nothrow(),
 ]);
 
 for (let i = 0; i < results.length; i++) {
