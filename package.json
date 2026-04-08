@@ -4,17 +4,34 @@
   "description": "Multi OpenClaw instance manager — scaffold, run, and deploy AI agents with persistent memory",
   "type": "module",
   "exports": {
-    ".": "./src/lib/api.ts",
-    "./security": "./src/sdk/index.ts",
-    "./security/patterns": "./src/sdk/patterns/index.ts",
-    "./security/providers": "./src/sdk/providers/index.ts"
+    ".": {
+      "bun": "./src/lib/api.ts",
+      "types": "./dist/lib/api.d.ts",
+      "default": "./dist/lib/api.js"
+    },
+    "./security": {
+      "bun": "./src/sdk/index.ts",
+      "types": "./dist/sdk/index.d.ts",
+      "default": "./dist/sdk/index.js"
+    },
+    "./security/patterns": {
+      "bun": "./src/sdk/patterns/index.ts",
+      "types": "./dist/sdk/patterns/index.d.ts",
+      "default": "./dist/sdk/patterns/index.js"
+    },
+    "./security/providers": {
+      "bun": "./src/sdk/providers/index.ts",
+      "types": "./dist/sdk/providers/index.d.ts",
+      "default": "./dist/sdk/providers/index.js"
+    }
   },
   "bin": {
     "claw-farm": "./src/index.ts"
   },
+  "files": ["src/", "dist/"],
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "bun build src/index.ts --outdir dist --target node",
+    "build": "bun run scripts/build.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
