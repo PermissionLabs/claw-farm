@@ -7,6 +7,7 @@ import type {
   ProxyResponse,
   RequestMiddleware,
 } from "./types.ts";
+import { STATE_KEYS } from "./utils.ts";
 
 export interface AuditLoggerOptions {
   path: string;
@@ -46,8 +47,8 @@ export function auditLogger(options: AuditLoggerOptions): RequestMiddleware {
     const response = await next();
 
     const elapsedMs = Math.round(performance.now() - start);
-    const piiFindings = ctx.state.get("piiFindings") as Finding[] | undefined;
-    const contentHash = ctx.state.get("contentHash") as string | undefined;
+    const piiFindings = ctx.state.get(STATE_KEYS.PII_FINDINGS) as Finding[] | undefined;
+    const contentHash = ctx.state.get(STATE_KEYS.CONTENT_HASH) as string | undefined;
 
     logger.log({
       event: "request",

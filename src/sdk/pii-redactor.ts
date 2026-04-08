@@ -2,7 +2,6 @@
 
 import { defaultPatterns } from "./patterns/index.ts";
 import type {
-  Finding,
   PiiMode,
   PiiPatternGroup,
   ProxyContext,
@@ -11,6 +10,7 @@ import type {
   RedactResult,
   RequestMiddleware,
 } from "./types.ts";
+import { applyPatterns, STATE_KEYS, walkJson } from "./utils.ts";
 
 export interface RedactPiiOptions {
   patterns?: PiiPatternGroup[];
@@ -24,22 +24,7 @@ export function redactPii(
   text: string,
   options?: RedactPiiOptions,
 ): RedactResult {
-  const groups = options?.patterns ?? defaultPatterns;
-  const findings: Finding[] = [];
-  let redacted = text;
-
-  for (const group of groups) {
-    for (const { name, regex, replacement } of group.patterns) {
-      regex.lastIndex = 0;
-      const matches = redacted.match(regex);
-      if (matches) {
-        findings.push({ type: name, count: matches.length });
-        redacted = redacted.replace(regex, replacement);
-      }
-    }
-  }
-
-  return { text: redacted, findings };
+  return applyPatterns(text, options?.patterns ?? defaultPatterns);
 }
 
 /**
@@ -56,33 +41,14 @@ export function redactRequestBody(
     return { body, findings: [] };
   }
 
-  const allFindings: Finding[] = [];
+  const { data: redacted, findings } = walkJson(data, (s) =>
+    redactPii(s, options),
+  );
 
-  function walk(obj: unknown): unknown {
-    if (typeof obj === "string") {
-      const { text, findings } = redactPii(obj, options);
-      allFindings.push(...findings);
-      return text;
-    }
-    if (Array.isArray(obj)) {
-      return obj.map(walk);
-    }
-    if (obj !== null && typeof obj === "object") {
-      const result: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-        result[k] = walk(v);
-      }
-      return result;
-    }
-    return obj;
-  }
-
-  const redacted = walk(data);
-
-  if (allFindings.length > 0) {
+  if (findings.length > 0) {
     return {
       body: Buffer.from(JSON.stringify(redacted), "utf-8"),
-      findings: allFindings,
+      findings,
     };
   }
 
@@ -106,7 +72,6 @@ export function piiRedactor(options?: PiiRedactorOptions): RequestMiddleware {
   const maxSizeMb = options?.maxSizeMb ?? 5;
 
   return async (ctx: ProxyContext, next: () => Promise<ProxyResponse>) => {
-    // Content size guard
     if (ctx.body.length > maxSizeMb * 1024 * 1024) {
       return {
         status: 413,
@@ -119,7 +84,7 @@ export function piiRedactor(options?: PiiRedactorOptions): RequestMiddleware {
       const result = redactRequestBody(ctx.body, { patterns });
       ctx.body = result.body;
       if (result.findings.length > 0) {
-        ctx.state.set("piiFindings", result.findings);
+        ctx.state.set(STATE_KEYS.PII_FINDINGS, result.findings);
       }
     } else if (mode === "block") {
       const text = ctx.body.toString("utf-8");
@@ -140,7 +105,7 @@ export function piiRedactor(options?: PiiRedactorOptions): RequestMiddleware {
       const text = ctx.body.toString("utf-8");
       const { findings } = redactPii(text, { patterns });
       if (findings.length > 0) {
-        ctx.state.set("piiFindings", findings);
+        ctx.state.set(STATE_KEYS.PII_FINDINGS, findings);
       }
     }
 

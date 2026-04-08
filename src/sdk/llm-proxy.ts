@@ -10,6 +10,7 @@ import type {
   ProxyResponse,
   RequestMiddleware,
 } from "./types.ts";
+import { STATE_KEYS } from "./utils.ts";
 
 const DEFAULT_FORWARD_HEADERS = new Set([
   "content-type",
@@ -83,12 +84,11 @@ export function createLlmProxy(options: LlmProxyOptions) {
       state: new Map(),
     };
 
-    // Content hash for audit trail
     const contentHash =
       rawBody.length > 0
         ? createHash("sha256").update(rawBody).digest("hex").slice(0, 16)
         : "empty";
-    ctx.state.set("contentHash", contentHash);
+    ctx.state.set(STATE_KEYS.CONTENT_HASH, contentHash);
 
     // --- Upstream fetch function (innermost layer of the onion) ---
     async function upstreamFetch(): Promise<ProxyResponse> {
@@ -107,8 +107,7 @@ export function createLlmProxy(options: LlmProxyOptions) {
       // Build upstream URL
       let upstreamUrl = `${provider.baseUrl}/${path}`;
 
-      // Query string allowlist
-      if (queryString) {
+      if (queryString && provider.queryAllowlist.size > 0) {
         const params = new URLSearchParams(queryString);
         const filtered: string[] = [];
         for (const [k, v] of params) {

@@ -2,7 +2,6 @@
 
 import { redactPii } from "./pii-redactor.ts";
 import type {
-  Finding,
   ProxyContext,
   ProxyResponse,
   RedactBodyResult,
@@ -10,6 +9,7 @@ import type {
   RequestMiddleware,
   SecretPatternGroup,
 } from "./types.ts";
+import { applyPatterns, walkJson } from "./utils.ts";
 
 export const defaultSecretPatterns: SecretPatternGroup[] = [
   {
@@ -77,22 +77,7 @@ export function scanSecrets(
   text: string,
   options?: ScanSecretsOptions,
 ): RedactResult {
-  const groups = options?.patterns ?? defaultSecretPatterns;
-  const findings: Finding[] = [];
-  let cleaned = text;
-
-  for (const group of groups) {
-    for (const { name, regex, replacement } of group.patterns) {
-      regex.lastIndex = 0;
-      const matches = cleaned.match(regex);
-      if (matches) {
-        findings.push({ type: name, count: matches.length });
-        cleaned = cleaned.replace(regex, replacement);
-      }
-    }
-  }
-
-  return { text: cleaned, findings };
+  return applyPatterns(text, options?.patterns ?? defaultSecretPatterns);
 }
 
 /**
@@ -118,34 +103,19 @@ export function scanResponseBody(
     return { body, findings: [] };
   }
 
-  const allFindings: Finding[] = [];
+  const { data: cleaned, findings } = walkJson(data, (s) => {
+    const { text: afterSecrets, findings: secretFindings } = scanSecrets(s, options);
+    const { text: afterPii, findings: piiFindings } = redactPii(afterSecrets);
+    return {
+      text: afterPii,
+      findings: [...secretFindings, ...piiFindings],
+    };
+  });
 
-  function walk(obj: unknown): unknown {
-    if (typeof obj === "string") {
-      const { text: cleaned, findings: secretFindings } = scanSecrets(obj, options);
-      const { text: final, findings: piiFindings } = redactPii(cleaned);
-      allFindings.push(...secretFindings, ...piiFindings);
-      return final;
-    }
-    if (Array.isArray(obj)) {
-      return obj.map(walk);
-    }
-    if (obj !== null && typeof obj === "object") {
-      const result: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-        result[k] = walk(v);
-      }
-      return result;
-    }
-    return obj;
-  }
-
-  const cleaned = walk(data);
-
-  if (allFindings.length > 0) {
+  if (findings.length > 0) {
     return {
       body: Buffer.from(JSON.stringify(cleaned), "utf-8"),
-      findings: allFindings,
+      findings,
     };
   }
 
