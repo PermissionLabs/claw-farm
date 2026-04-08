@@ -50,7 +50,7 @@ export function createLlmProxy(options: LlmProxyOptions) {
 
   async function proxy(request: ProxyRequest): Promise<ProxyResponse> {
     const { method, queryString, headers: incomingHeaders, body: rawBody } = request;
-    // Normalize path: strip leading slash to prevent double-slash in URL and prefix mismatch
+    // Prevent double-slash in upstream URL and prefix mismatch
     const path = request.path.replace(/^\/+/, "");
 
     // --- Built-in guard: path traversal + prefix validation ---

@@ -31,6 +31,34 @@ import type { RuntimeType, ProxyMode } from "../runtimes/interface.ts";
 export type { InstanceEntry, ProjectEntry };
 export { getInstance, getProject };
 
+const ENV_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function validateEnvEntry(key: string, value: string): string {
+  if (!ENV_KEY_REGEX.test(key)) {
+    throw new Error(`Invalid env var key: "${key}"`);
+  }
+  if (value.includes("\n") || value.includes("\r")) {
+    throw new Error(`Env var "${key}" contains newline characters`);
+  }
+  return `${key}=${value}`;
+}
+
+async function resolveInstance(project: string, userId: string) {
+  validateName(userId, "user ID");
+  const { name: projectName, entry } = await resolveProjectName(project);
+  const projectDir = entry.path;
+  const instance = await getInstance(projectName, userId);
+  if (!instance) {
+    throw new Error(`Instance for user "${userId}" not found in "${projectName}"`);
+  }
+  const instDir = instanceDir(projectDir, userId);
+  return {
+    projectName, projectDir, entry, instance, instDir,
+    composePath: join(instDir, COMPOSE_FILENAME),
+    composeProject: `${projectName}-${userId}`,
+  };
+}
+
 export async function spawn(options: {
   project: string;
   userId: string;
@@ -117,9 +145,8 @@ export async function spawn(options: {
       );
     }
 
-    // Write instance.env (custom environment variables for container)
     const envContent = env
-      ? Object.entries(env).map(([k, v]) => `${k}=${v}`).join("\n") + "\n"
+      ? Object.entries(env).map(([k, v]) => validateEnvEntry(k, v)).join("\n") + "\n"
       : "";
     await Bun.write(join(instDir, "instance.env"), envContent);
 
@@ -182,24 +209,11 @@ export async function despawn(
   userId: string,
   options?: { keepData?: boolean },
 ): Promise<void> {
-  validateName(userId, "user ID");
+  const { projectName, projectDir, entry, instDir, composePath, composeProject } =
+    await resolveInstance(project, userId);
 
-  const { name: projectName, entry } = await resolveProjectName(project);
-  const projectDir = entry.path;
-
-  const instance = await getInstance(projectName, userId);
-  if (!instance) {
-    throw new Error(`Instance for user "${userId}" not found in "${projectName}"`);
-  }
-
-  // Stop containers first
-  const instDir = instanceDir(projectDir, userId);
-  const composePath = join(instDir, COMPOSE_FILENAME);
-
-  // Determine if shared proxy mode — need to disconnect api-proxy from instance network
   const config = await readProjectConfig(projectDir);
   const { runtimeType, proxyMode } = resolveRuntimeConfig(config, entry);
-  const composeProject = `${projectName}-${userId}`;
   const connectContainer = (proxyMode === "shared" && runtimeType !== "openclaw")
     ? { container: `${projectName}-api-proxy`, network: `${composeProject}_instance-net` }
     : undefined;
@@ -214,12 +228,10 @@ export async function despawn(
     console.warn(`⚠ Could not stop containers: ${(err as Error).message}`);
   }
 
-  // Remove data before registry (if data removal fails, registry still has the entry for retry)
   if (!options?.keepData) {
     await rm(instDir, { recursive: true, force: true });
   }
 
-  // Remove from registry last (after cleanup is done)
   await removeInstance(projectName, userId);
 }
 
@@ -231,24 +243,10 @@ export async function stopInstance(
   project: string,
   userId: string,
 ): Promise<void> {
-  validateName(userId, "user ID");
+  const { projectDir, composePath, composeProject } =
+    await resolveInstance(project, userId);
 
-  const { name: projectName, entry } = await resolveProjectName(project);
-  const projectDir = entry.path;
-
-  const instance = await getInstance(projectName, userId);
-  if (!instance) {
-    throw new Error(`Instance for user "${userId}" not found in "${projectName}"`);
-  }
-
-  const instDir = instanceDir(projectDir, userId);
-  const composePath = join(instDir, COMPOSE_FILENAME);
-  const composeProject = `${projectName}-${userId}`;
-
-  await runCompose(projectDir, "stop", {
-    composePath,
-    projectName: composeProject,
-  });
+  await runCompose(projectDir, "stop", { composePath, projectName: composeProject });
 }
 
 /**
@@ -259,24 +257,10 @@ export async function startInstance(
   project: string,
   userId: string,
 ): Promise<{ port: number }> {
-  validateName(userId, "user ID");
+  const { projectDir, instance, composePath, composeProject } =
+    await resolveInstance(project, userId);
 
-  const { name: projectName, entry } = await resolveProjectName(project);
-  const projectDir = entry.path;
-
-  const instance = await getInstance(projectName, userId);
-  if (!instance) {
-    throw new Error(`Instance for user "${userId}" not found in "${projectName}"`);
-  }
-
-  const instDir = instanceDir(projectDir, userId);
-  const composePath = join(instDir, COMPOSE_FILENAME);
-  const composeProject = `${projectName}-${userId}`;
-
-  await runCompose(projectDir, "start", {
-    composePath,
-    projectName: composeProject,
-  });
+  await runCompose(projectDir, "start", { composePath, projectName: composeProject });
 
   return { port: instance.port };
 }
