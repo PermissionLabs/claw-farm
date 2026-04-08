@@ -28,7 +28,7 @@
   "bin": {
     "claw-farm": "./src/index.ts"
   },
-  "files": ["src/", "dist/", "scripts/"],
+  "files": ["src/", "dist/"],
   "scripts": {
     "dev": "bun run src/index.ts",
     "build": "bun run scripts/build.ts",

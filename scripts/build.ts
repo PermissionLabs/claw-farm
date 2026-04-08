@@ -21,28 +21,29 @@ const ENTRY_POINTS = [
 ];
 
 // 1. Clean dist/
-console.log("Cleaning dist/...");
 await rm(DIST, { recursive: true, force: true });
 
-// 2. Build JS bundles (one per entry point, externalize node built-ins & packages)
-console.log("Building JS bundles...");
-for (const { entry, outdir } of ENTRY_POINTS) {
-  const result = await Bun.build({
-    entrypoints: [entry],
-    outdir,
-    target: "node",
-    format: "esm",
-    packages: "external",
-    naming: "[name].js",
-  });
-  if (!result.success) {
-    console.error(`Build failed for ${entry}:`, result.logs);
+// 2. Build JS bundles in parallel
+const results = await Promise.all(
+  ENTRY_POINTS.map(({ entry, outdir }) =>
+    Bun.build({
+      entrypoints: [entry],
+      outdir,
+      target: "node",
+      format: "esm",
+      packages: "external",
+      naming: "[name].js",
+    }),
+  ),
+);
+for (let i = 0; i < results.length; i++) {
+  if (!results[i].success) {
+    console.error(`Build failed for ${ENTRY_POINTS[i].entry}:`, results[i].logs);
     process.exit(1);
   }
 }
 
 // 3. Generate .d.ts declarations via tsc
-console.log("Generating declarations...");
 const tsc = await $`bunx tsc -p tsconfig.build.json`.quiet().nothrow();
 if (tsc.exitCode !== 0) {
   console.error("tsc declaration generation failed:");
@@ -52,28 +53,25 @@ if (tsc.exitCode !== 0) {
 
 // 4. Post-process .d.ts files: rewrite .ts import extensions to .js
 //    so consumers without allowImportingTsExtensions can resolve them.
-console.log("Fixing .d.ts import extensions...");
 await fixDtsExtensions(DIST);
 
 console.log("Build complete.");
 
 async function fixDtsExtensions(dir: string): Promise<void> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      await fixDtsExtensions(fullPath);
-    } else if (entry.name.endsWith(".d.ts")) {
-      const content = await readFile(fullPath, "utf8");
-      // Replace: from "./foo.ts" → from "./foo.js"
-      //          import("./foo.ts") → import("./foo.js")
-      const fixed = content.replace(
-        /(from\s+["']\..*?)\.ts(["'])/g,
-        "$1.js$2",
-      );
-      if (fixed !== content) {
-        await writeFile(fullPath, fixed);
-      }
-    }
-  }
+  const files = await readdir(dir, { recursive: true });
+  await Promise.all(
+    files
+      .filter((f) => f.endsWith(".d.ts"))
+      .map(async (rel) => {
+        const fullPath = join(dir, rel);
+        const content = await readFile(fullPath, "utf8");
+        const fixed = content.replace(
+          /((?:from|import\()\s*["']\..*?)\.ts(["'])/g,
+          "$1.js$2",
+        );
+        if (fixed !== content) {
+          await writeFile(fullPath, fixed);
+        }
+      }),
+  );
 }
