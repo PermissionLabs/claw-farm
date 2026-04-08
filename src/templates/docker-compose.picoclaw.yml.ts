@@ -141,6 +141,8 @@ ${hasProxy ? `  api-proxy:
       - "127.0.0.1:${port}:18790"
     volumes:
       - ./picoclaw:/root/.picoclaw
+    env_file:
+      - ./instance.env
 ${hasProxy ? `    environment:
       PICOCLAW_PROXY_URL: http://api-proxy:8080
     networks:
@@ -198,6 +200,8 @@ services:
       - "127.0.0.1:${port}:18790"
     volumes:
       - ./picoclaw:/root/.picoclaw
+    env_file:
+      - ./instance.env
     environment:
       PICOCLAW_PROXY_URL: http://${projectName}-api-proxy:8080
     networks:

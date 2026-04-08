@@ -13,8 +13,10 @@ import {
   removeInstance,
   listInstances as registryListInstances,
   getInstance,
+  getProject,
   validateName,
   type InstanceEntry,
+  type ProjectEntry,
 } from "./registry.ts";
 import { readProjectConfig, resolveRuntimeConfig } from "./config.ts";
 import { fileExists } from "./fs-utils.ts";
@@ -26,15 +28,45 @@ import { migrateToMulti } from "./migrate.ts";
 import { getRuntime } from "../runtimes/index.ts";
 import type { RuntimeType, ProxyMode } from "../runtimes/interface.ts";
 
-export type { InstanceEntry };
+export type { InstanceEntry, ProjectEntry };
+export { getInstance, getProject };
+
+const ENV_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function validateEnvEntry(key: string, value: string): string {
+  if (!ENV_KEY_REGEX.test(key)) {
+    throw new Error(`Invalid env var key: "${key}"`);
+  }
+  if (value.includes("\n") || value.includes("\r")) {
+    throw new Error(`Env var "${key}" contains newline characters`);
+  }
+  return `${key}=${value}`;
+}
+
+async function resolveInstance(project: string, userId: string) {
+  validateName(userId, "user ID");
+  const { name: projectName, entry } = await resolveProjectName(project);
+  const projectDir = entry.path;
+  const instance = await getInstance(projectName, userId);
+  if (!instance) {
+    throw new Error(`Instance for user "${userId}" not found in "${projectName}"`);
+  }
+  const instDir = instanceDir(projectDir, userId);
+  return {
+    projectName, projectDir, entry, instance, instDir,
+    composePath: join(instDir, COMPOSE_FILENAME),
+    composeProject: `${projectName}-${userId}`,
+  };
+}
 
 export async function spawn(options: {
   project: string;
   userId: string;
   context?: Record<string, string>;
+  env?: Record<string, string>;
   autoStart?: boolean;
 }): Promise<{ userId: string; port: number }> {
-  const { project, userId, context, autoStart = true } = options;
+  const { project, userId, context, env, autoStart = true } = options;
 
   // Validate userId (security: prevents path traversal via programmatic API)
   validateName(userId, "user ID");
@@ -113,6 +145,11 @@ export async function spawn(options: {
       );
     }
 
+    const envContent = env
+      ? Object.entries(env).map(([k, v]) => validateEnvEntry(k, v)).join("\n") + "\n"
+      : "";
+    await Bun.write(join(instDir, "instance.env"), envContent);
+
     // Write compose (always regenerate)
     let composeContent: string;
     if (runtimeType === "openclaw") {
@@ -172,24 +209,11 @@ export async function despawn(
   userId: string,
   options?: { keepData?: boolean },
 ): Promise<void> {
-  validateName(userId, "user ID");
+  const { projectName, projectDir, entry, instDir, composePath, composeProject } =
+    await resolveInstance(project, userId);
 
-  const { name: projectName, entry } = await resolveProjectName(project);
-  const projectDir = entry.path;
-
-  const instance = await getInstance(projectName, userId);
-  if (!instance) {
-    throw new Error(`Instance for user "${userId}" not found in "${projectName}"`);
-  }
-
-  // Stop containers first
-  const instDir = instanceDir(projectDir, userId);
-  const composePath = join(instDir, COMPOSE_FILENAME);
-
-  // Determine if shared proxy mode — need to disconnect api-proxy from instance network
   const config = await readProjectConfig(projectDir);
   const { runtimeType, proxyMode } = resolveRuntimeConfig(config, entry);
-  const composeProject = `${projectName}-${userId}`;
   const connectContainer = (proxyMode === "shared" && runtimeType !== "openclaw")
     ? { container: `${projectName}-api-proxy`, network: `${composeProject}_instance-net` }
     : undefined;
@@ -204,13 +228,41 @@ export async function despawn(
     console.warn(`⚠ Could not stop containers: ${(err as Error).message}`);
   }
 
-  // Remove data before registry (if data removal fails, registry still has the entry for retry)
   if (!options?.keepData) {
     await rm(instDir, { recursive: true, force: true });
   }
 
-  // Remove from registry last (after cleanup is done)
   await removeInstance(projectName, userId);
+}
+
+/**
+ * Stop a running instance's containers without destroying them.
+ * Data, volumes, and registry entry are preserved.
+ */
+export async function stopInstance(
+  project: string,
+  userId: string,
+): Promise<void> {
+  const { projectDir, composePath, composeProject } =
+    await resolveInstance(project, userId);
+
+  await runCompose(projectDir, "stop", { composePath, projectName: composeProject });
+}
+
+/**
+ * Start a previously stopped instance's containers.
+ * Containers must already exist (created by spawn).
+ */
+export async function startInstance(
+  project: string,
+  userId: string,
+): Promise<{ port: number }> {
+  const { projectDir, instance, composePath, composeProject } =
+    await resolveInstance(project, userId);
+
+  await runCompose(projectDir, "start", { composePath, projectName: composeProject });
+
+  return { port: instance.port };
 }
 
 export async function listInstances(
