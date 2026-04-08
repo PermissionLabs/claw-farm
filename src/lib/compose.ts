@@ -20,7 +20,7 @@ export interface ComposeOptions {
 
 export async function runCompose(
   projectDir: string,
-  action: "up" | "down",
+  action: "up" | "down" | "stop" | "start",
   options?: ComposeOptions,
 ): Promise<void> {
   const composePath = options?.composePath ?? join(projectDir, COMPOSE_FILENAME);
@@ -40,7 +40,7 @@ export async function runCompose(
 
   if (action === "up") {
     args.push("up", "-d");
-  } else {
+  } else if (action === "down") {
     // On down, disconnect container from network first (best effort)
     if (options?.connectContainer) {
       await dockerNetworkDisconnect(
@@ -49,6 +49,9 @@ export async function runCompose(
       );
     }
     args.push("down");
+  } else {
+    // stop / start — preserve containers and volumes
+    args.push(action);
   }
 
   const proc = Bun.spawn(args, {

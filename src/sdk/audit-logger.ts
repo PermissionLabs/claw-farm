@@ -23,6 +23,10 @@ export interface AuditLogger {
  * Fire-and-forget: never throws, logs errors via optional logger.
  */
 export function createAuditLogger(options: AuditLoggerOptions): AuditLogger {
+  if (!options.path) {
+    throw new Error("auditLogger: path is required");
+  }
+
   return {
     log(entry: Record<string, unknown>): void {
       const line =

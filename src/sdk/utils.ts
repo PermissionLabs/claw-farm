@@ -64,6 +64,7 @@ export function walkJson(
     if (value !== null && typeof value === "object") {
       const result: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
         result[k] = walk(v);
       }
       return result;

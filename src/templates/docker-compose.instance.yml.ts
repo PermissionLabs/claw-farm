@@ -61,6 +61,8 @@ ${hasProxy ? `  api-proxy:
       # Template files (SOUL.md, AGENTS.md, skills/) are copied into openclaw/workspace/
       # at spawn/upgrade time instead of overlay mounts (Docker Desktop compatibility)
       - ./openclaw:/home/node/.openclaw
+    env_file:
+      - ./instance.env
     environment:
 ${hasProxy ? `      OPENCLAW_API_PROXY: http://api-proxy:8080` : `      # OPENCLAW_API_PROXY: not set (proxyMode: none)`}
       OPENCLAW_SANDBOX: 1

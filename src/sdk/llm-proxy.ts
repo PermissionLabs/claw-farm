@@ -49,7 +49,9 @@ export function createLlmProxy(options: LlmProxyOptions) {
     options.pipeline ?? [piiRedactor(), secretScanner()];
 
   async function proxy(request: ProxyRequest): Promise<ProxyResponse> {
-    const { method, path, queryString, headers: incomingHeaders, body: rawBody } = request;
+    const { method, queryString, headers: incomingHeaders, body: rawBody } = request;
+    // Normalize path: strip leading slash to prevent double-slash in URL and prefix mismatch
+    const path = request.path.replace(/^\/+/, "");
 
     // --- Built-in guard: path traversal + prefix validation ---
     if (

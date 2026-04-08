@@ -13,8 +13,10 @@ import {
   removeInstance,
   listInstances as registryListInstances,
   getInstance,
+  getProject,
   validateName,
   type InstanceEntry,
+  type ProjectEntry,
 } from "./registry.ts";
 import { readProjectConfig, resolveRuntimeConfig } from "./config.ts";
 import { fileExists } from "./fs-utils.ts";
@@ -26,15 +28,17 @@ import { migrateToMulti } from "./migrate.ts";
 import { getRuntime } from "../runtimes/index.ts";
 import type { RuntimeType, ProxyMode } from "../runtimes/interface.ts";
 
-export type { InstanceEntry };
+export type { InstanceEntry, ProjectEntry };
+export { getInstance, getProject };
 
 export async function spawn(options: {
   project: string;
   userId: string;
   context?: Record<string, string>;
+  env?: Record<string, string>;
   autoStart?: boolean;
 }): Promise<{ userId: string; port: number }> {
-  const { project, userId, context, autoStart = true } = options;
+  const { project, userId, context, env, autoStart = true } = options;
 
   // Validate userId (security: prevents path traversal via programmatic API)
   validateName(userId, "user ID");
@@ -112,6 +116,12 @@ export async function spawn(options: {
         `# ${projectName} — Memory (${userId})\n\n> This file is updated automatically as the agent learns from conversations.\n`,
       );
     }
+
+    // Write instance.env (custom environment variables for container)
+    const envContent = env
+      ? Object.entries(env).map(([k, v]) => `${k}=${v}`).join("\n") + "\n"
+      : "";
+    await Bun.write(join(instDir, "instance.env"), envContent);
 
     // Write compose (always regenerate)
     let composeContent: string;
@@ -211,6 +221,64 @@ export async function despawn(
 
   // Remove from registry last (after cleanup is done)
   await removeInstance(projectName, userId);
+}
+
+/**
+ * Stop a running instance's containers without destroying them.
+ * Data, volumes, and registry entry are preserved.
+ */
+export async function stopInstance(
+  project: string,
+  userId: string,
+): Promise<void> {
+  validateName(userId, "user ID");
+
+  const { name: projectName, entry } = await resolveProjectName(project);
+  const projectDir = entry.path;
+
+  const instance = await getInstance(projectName, userId);
+  if (!instance) {
+    throw new Error(`Instance for user "${userId}" not found in "${projectName}"`);
+  }
+
+  const instDir = instanceDir(projectDir, userId);
+  const composePath = join(instDir, COMPOSE_FILENAME);
+  const composeProject = `${projectName}-${userId}`;
+
+  await runCompose(projectDir, "stop", {
+    composePath,
+    projectName: composeProject,
+  });
+}
+
+/**
+ * Start a previously stopped instance's containers.
+ * Containers must already exist (created by spawn).
+ */
+export async function startInstance(
+  project: string,
+  userId: string,
+): Promise<{ port: number }> {
+  validateName(userId, "user ID");
+
+  const { name: projectName, entry } = await resolveProjectName(project);
+  const projectDir = entry.path;
+
+  const instance = await getInstance(projectName, userId);
+  if (!instance) {
+    throw new Error(`Instance for user "${userId}" not found in "${projectName}"`);
+  }
+
+  const instDir = instanceDir(projectDir, userId);
+  const composePath = join(instDir, COMPOSE_FILENAME);
+  const composeProject = `${projectName}-${userId}`;
+
+  await runCompose(projectDir, "start", {
+    composePath,
+    projectName: composeProject,
+  });
+
+  return { port: instance.port };
 }
 
 export async function listInstances(
