@@ -7,6 +7,6 @@
     "outDir": "dist",
     "declarationDir": "dist"
   },
-  "include": ["src/lib/**/*.ts", "src/sdk/**/*.ts", "src/runtimes/**/*.ts", "src/templates/**/*.ts", "src/processors/**/*.ts"],
+  "include": ["src/lib/**/*.ts", "src/sdk/**/*.ts"],
   "exclude": ["src/**/*.test.ts", "src/**/__tests__/**"]
 }

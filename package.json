@@ -32,6 +32,7 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "build": "bun run scripts/build.ts",
+    "prepare": "bun run build",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
