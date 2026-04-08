@@ -1,15 +1,46 @@
 # claw-farm
 
-Multi-runtime AI agent manager — scaffold, run, and deploy agents with persistent memory. Supports OpenClaw and picoclaw runtimes.
+**Deploy one AI agent per user, securely.** The infrastructure toolkit for agent-per-user services — so you build the agent, not the plumbing.
+
+```
+Your Service ──→ claw-farm ──→ [User A's Agent] ──→ LLM API
+                               [User B's Agent] ──→ (API keys isolated,
+                               [User C's Agent]      PII redacted,
+                               [  ...N users  ]      secrets scanned)
+```
+
+## The Problem
+
+Building a service where each user gets their own AI agent? You'll need:
+- Per-user isolated containers (Docker networking, ports, volumes)
+- API key proxying (agent must never see raw keys)
+- PII auto-redaction on outbound LLM calls
+- Secret scanning on inbound LLM responses
+- Persistent memory per user (immutable raw data + rebuildable index)
+- Template sharing across users (personality, skills, config)
+- Scaffolding, deployment, upgrade tooling
+
+That's weeks of boilerplate before you write a single line of agent logic.
+
+## The Solution
+
+```bash
+claw-farm init my-agent --multi
+claw-farm spawn my-agent --user alice
+claw-farm spawn my-agent --user bob
+# Done. Two isolated agents, secured, with persistent memory.
+```
+
+**CLI** to scaffold & manage. **SDK** to integrate security into your own server.
 
 ## Features
 
-- **One-command scaffolding**: `claw-farm init my-agent` creates a full agent project with Docker Compose, config, and memory structure
-- **Multi-runtime**: OpenClaw (full-featured, ~1.5GB) or picoclaw (lightweight Go, ~20MB)
-- **Security by default**: API proxy sidecar isolates keys from the agent, auto-redacts PII, scans LLM responses for secrets
-- **2-Layer Memory Architecture**: Raw data is immutable (never deleted), processing layer is swappable
-- **Multiple processors**: Builtin (MEMORY.md) or Mem0+Qdrant for semantic vector search
-- **Multi-instance management**: Run multiple agents with auto-assigned ports
+- **One-command scaffolding**: `claw-farm init` creates Docker Compose, security proxy, config, and memory structure
+- **Per-user isolation**: Each user gets their own container, memory, and sessions — shared personality and skills
+- **Security by default**: API key isolation, PII auto-redaction, secret scanning, audit logging
+- **Security SDK**: `import { createLlmProxy } from "@permissionlabs/claw-farm/security"` — same guards as the proxy container, importable as TypeScript middleware
+- **Multi-runtime**: OpenClaw (~1.5GB, full-featured) or picoclaw (~20MB, lightweight Go)
+- **2-Layer Memory**: Raw data is immutable, processing layer is swappable (Builtin or Mem0+Qdrant)
 - **Cloud-ready**: Generate unified docker-compose for Coolify/Hetzner deployment
 
 ## Install
