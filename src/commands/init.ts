@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { mkdir, chmod } from "node:fs/promises";
 import { addProject, loadRegistry, saveRegistry, withLock, findPositionalArg } from "../lib/registry.ts";
+import { writeSecret } from "../lib/secret-file.ts";
 import { writeProjectConfig, envExampleTemplate, type LlmProvider } from "../lib/config.ts";
 import { ensureRawDirs } from "../lib/raw-collector.ts";
 import { mem0ComposeTemplate } from "../templates/docker-compose.mem0.yml.ts";
@@ -199,7 +200,7 @@ export async function initCommand(args: string[]): Promise<void> {
 
   // Write .env.example if not exists
   if (!await Bun.file(join(projectDir, ".env.example")).exists()) {
-    await Bun.write(join(projectDir, ".env.example"), envExampleTemplate(llm, processor));
+    await writeSecret(join(projectDir, ".env.example"), envExampleTemplate(llm, processor));
   }
 
   console.log(`\n✅ Project "${name}" initialized!`);
@@ -402,7 +403,7 @@ async function initMulti(
   }
 
   // Write .env.example
-  await Bun.write(join(projectDir, ".env.example"), envExampleTemplate(llm, processor));
+  await writeSecret(join(projectDir, ".env.example"), envExampleTemplate(llm, processor));
   console.log("✓ Generated .env.example");
 
   // Write .gitignore

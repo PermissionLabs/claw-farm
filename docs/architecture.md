@@ -264,8 +264,10 @@ User: "My dog's phone is 010-1234-5678 and SSN 880101-1234567..."
 ```
 
 **PII redaction targets:** Korean RRN, mobile, landline / US SSN, phone / Credit cards / Email
-**Secret scan targets:** Google/OpenAI/Anthropic/GitHub/GitLab/AWS/Stripe keys, JWT, Private Key
+**Secret scan targets:** Google/OpenAI/Anthropic/GitHub/GitLab/AWS/Stripe keys (including STS session tokens), JWT, Private Key
 **PII mode:** `PII_MODE=redact` (default, auto-mask) | `block` (reject) | `warn` (log only)
+
+**Pattern source (BKLG-001):** `src/sdk/patterns/secrets.ts` → `src/sdk/patterns/python-emitter.ts` → `api-proxy.ts`. The TypeScript SDK and Python api-proxy share a single pattern definition; the emitter serializes TS regex literals to Python-compatible strings at build time. Both now scan SSE (`text/event-stream`) and non-JSON response bodies via a raw-text fallback in addition to the JSON parse path.
 
 ## 5. 2-Layer Memory
 
@@ -516,6 +518,9 @@ Each runtime implements:
 - **scaffoldInstance()** — Generate per-user instance files
 - **getComposeFile()** — Return the compose filename for the runtime
 - **getWorkspacePaths()** — Return runtime-specific paths (config, memory, sessions)
+- **instanceComposeTemplate()** — Return the per-instance compose file content
+
+**Unified routing (BKLG-005):** All commands that need an instance compose template now call `runtime.instanceComposeTemplate(...)` through the interface. The previous direct import of the OpenClaw-specific template from `templates/docker-compose.instance.yml.ts` has been removed. This ensures picoclaw and any future runtime generate the correct compose file without command-layer branching.
 
 ### Runtime Selection
 
@@ -547,6 +552,39 @@ The `runtime` field is stored in `.claw-farm.json`:
 | **Sessions** | sessions/ (.jsonl) | workspace/sessions/ |
 | **Best for** | Full-featured agents, rich plugin ecosystem | Lightweight agents, resource-constrained environments |
 | **Multi-agent** | Per-user isolation (spawn) | Built-in roles (not per-user) |
+
+## 8a. CI / Testing
+
+### Workflow
+
+`.github/workflows/ci.yml` runs on every pull request and push to `main`:
+
+1. **typecheck** — `bun run typecheck` (`tsc --noEmit` with strict flags including `noUncheckedIndexedAccess`, `noUnusedLocals`, `noUnusedParameters`)
+2. **test** — `bun test` (all `*.test.ts` files under `src/`)
+3. **build** — `bun run build` (generates `dist/` with CJS + ESM + type declarations)
+
+### Test Layout
+
+```
+src/
+├── lib/__tests__/
+│   ├── api.test.ts              # spawn/despawn/startInstance/stopInstance
+│   ├── migrate.test.ts          # migrate-runtime step logic
+│   └── mergeOpenclawConfig.test.ts
+└── sdk/__tests__/
+    ├── pii-redactor.test.ts     # PII patterns: ASCII, fullwidth, zero-width, Arabic-Indic
+    ├── secret-scanner.test.ts   # Secret patterns: AWS STS, Anthropic, SSE path
+    ├── python-emitter.test.ts   # TS→Python pattern serialization round-trip
+    └── llm-proxy.test.ts        # Middleware pipeline, error propagation, non-JSON fallback
+```
+
+### Running Locally
+
+```bash
+bun run typecheck   # type-check only (fast)
+bun test            # run all tests
+bun run build       # full build (dist/)
+```
 
 ## 9. proxyMode: Shared vs Per-Instance API Proxy
 

@@ -262,8 +262,10 @@ openclaw은 internal 네트워크에 완전 격리 — 인터넷 접근 불가.
 ```
 
 **PII 리댁션 대상:** 한국 주민번호, 휴대폰, 유선전화, 미국 SSN, 전화번호, 신용카드, 이메일
-**시크릿 스캔 대상:** Google/OpenAI/Anthropic/GitHub/GitLab/AWS/Stripe 키, JWT, Private Key
+**시크릿 스캔 대상:** Google/OpenAI/Anthropic/GitHub/GitLab/AWS/Stripe 키 (STS 세션 토큰 포함), JWT, Private Key
 **PII 모드:** `PII_MODE=redact` (기본, 자동 마스킹) | `block` (차단) | `warn` (경고만)
+
+**패턴 소스 (BKLG-001):** `src/sdk/patterns/secrets.ts` → `src/sdk/patterns/python-emitter.ts` → `api-proxy.ts`. TypeScript SDK와 Python api-proxy는 단일 패턴 정의를 공유합니다. 이미터가 빌드 시 TS 정규식 리터럴을 Python 호환 문자열로 직렬화합니다. 두 경로 모두 JSON 파싱 경로에 더해 SSE(`text/event-stream`) 및 비-JSON 응답 본문을 raw-text 폴백으로 스캔합니다.
 
 ## 5. 메모리 2-Layer 구조
 
@@ -514,6 +516,9 @@ src/
 - **scaffoldInstance()** — 유저별 인스턴스 파일 생성
 - **getComposeFile()** — 런타임의 compose 파일명 반환
 - **getWorkspacePaths()** — 런타임별 경로 반환 (config, memory, sessions)
+- **instanceComposeTemplate()** — 인스턴스별 compose 파일 내용 반환
+
+**통합 라우팅 (BKLG-005):** 인스턴스 compose 템플릿이 필요한 모든 명령은 이제 인터페이스를 통해 `runtime.instanceComposeTemplate(...)`을 호출합니다. OpenClaw 전용 템플릿을 `templates/docker-compose.instance.yml.ts`에서 직접 import하던 방식이 제거되었습니다. 이를 통해 picoclaw 및 향후 추가될 런타임이 명령 레이어 분기 없이 올바른 compose 파일을 생성합니다.
 
 ### 런타임 선택
 
@@ -545,6 +550,39 @@ claw-farm init my-agent --runtime picoclaw       # 경량: picoclaw
 | **세션** | sessions/ (.jsonl) | workspace/sessions/ |
 | **적합한 용도** | 풀 기능 에이전트, 풍부한 플러그인 생태계 | 경량 에이전트, 리소스 제한 환경 |
 | **멀티 에이전트** | 유저별 격리 (spawn) | 내장 역할(role) 기반 (유저별 아님) |
+
+## 8a. CI / 테스팅
+
+### 워크플로
+
+`.github/workflows/ci.yml`은 모든 pull request와 `main` 브랜치 push 시 실행됩니다:
+
+1. **typecheck** — `bun run typecheck` (`noUncheckedIndexedAccess`, `noUnusedLocals`, `noUnusedParameters` 등 strict 플래그 포함 `tsc --noEmit`)
+2. **test** — `bun test` (`src/` 하위 모든 `*.test.ts` 파일)
+3. **build** — `bun run build` (CJS + ESM + 타입 선언이 포함된 `dist/` 생성)
+
+### 테스트 레이아웃
+
+```
+src/
+├── lib/__tests__/
+│   ├── api.test.ts              # spawn/despawn/startInstance/stopInstance
+│   ├── migrate.test.ts          # migrate-runtime 단계 로직
+│   └── mergeOpenclawConfig.test.ts
+└── sdk/__tests__/
+    ├── pii-redactor.test.ts     # PII 패턴: ASCII, 전각, 제로폭, 아라비아 숫자
+    ├── secret-scanner.test.ts   # 시크릿 패턴: AWS STS, Anthropic, SSE 경로
+    ├── python-emitter.test.ts   # TS→Python 패턴 직렬화 왕복 테스트
+    └── llm-proxy.test.ts        # 미들웨어 파이프라인, 오류 전파, 비-JSON 폴백
+```
+
+### 로컬 실행
+
+```bash
+bun run typecheck   # 타입 검사만 (빠름)
+bun test            # 전체 테스트 실행
+bun run build       # 전체 빌드 (dist/)
+```
 
 ## 9. proxyMode: 공유 vs 인스턴스별 API 프록시
 

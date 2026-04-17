@@ -27,6 +27,7 @@ ${hasProxy ? `  api-proxy:
       - ./logs:/logs
     networks:
       - proxy-net
+    init: true
     read_only: true
     tmpfs:
       - /tmp:size=50M
@@ -115,6 +116,7 @@ ${hasProxy ? `  api-proxy:
       - ./logs:/logs
     networks:
       - proxy-net
+    init: true
     read_only: true
     tmpfs:
       - /tmp:size=50M
@@ -261,6 +263,7 @@ services:
       - ./logs:/logs
     networks:
       - ${name}-proxy-net
+    init: true
     read_only: true
     tmpfs:
       - /tmp:size=50M

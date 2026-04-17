@@ -25,7 +25,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN useradd -r -s /bin/false appuser
+RUN groupadd -g 10001 appuser && useradd -r -u 10001 -g 10001 -s /bin/false appuser && chown -R appuser:appuser /app
 USER appuser
 
 COPY mem0_server.py .

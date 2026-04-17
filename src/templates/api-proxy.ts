@@ -13,8 +13,11 @@
 
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import { defaultSecretPatterns } from "../sdk/secret-scanner.ts";
+import { emitPythonSecretPatterns } from "../sdk/patterns/python-emitter.ts";
 
 export function apiProxyServerTemplate(): string {
+  const secretPatternLines = emitPythonSecretPatterns(defaultSecretPatterns);
   return `"""
 API Proxy — key injection + PII redaction + response secret scanning.
 Sits between OpenClaw and external LLM APIs.
@@ -32,13 +35,21 @@ OpenClaw → http://api-proxy:8080/... → (redact + key inject) → LLM API
 """
 
 import hashlib
+import ipaddress
 import json
 import logging
 import os
 import re
+import socket
 import time
+import unicodedata
 from datetime import datetime, timezone
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
+
+try:
+    import certifi
+except ImportError:
+    raise RuntimeError("certifi is required for TLS verification — add certifi to requirements.txt")
 
 import httpx
 from fastapi import FastAPI, Request, Response
@@ -100,6 +111,53 @@ PROVIDER_CONFIG = {
 ACTIVE_PROVIDER = PROVIDER_CONFIG.get(LLM_PROVIDER, PROVIDER_CONFIG["gemini"])
 UPSTREAM_BASE = ACTIVE_PROVIDER["base_url"]
 
+# --- SSRF startup check ---
+# Reject private/link-local/loopback upstream URLs unless ALLOW_PRIVATE_BASE_URL=1.
+# This blocks IMDS theft (169.254.169.254), internal network scanning, etc.
+_SSRF_ALLOW_PRIVATE = os.environ.get("ALLOW_PRIVATE_BASE_URL", "").strip() == "1"
+_FORBIDDEN_HOSTNAMES = {"metadata.google.internal", "metadata.goog", "metadata"}
+
+def _check_upstream_ssrf(base_url: str) -> None:
+    """Raise RuntimeError if base_url resolves to a private/reserved address."""
+    if _SSRF_ALLOW_PRIVATE:
+        return
+    try:
+        parsed = urlparse(base_url)
+        hostname = parsed.hostname or ""
+    except Exception as exc:
+        raise RuntimeError(f"SSRF check: cannot parse UPSTREAM_BASE {base_url!r}: {exc}") from exc
+
+    if not hostname:
+        raise RuntimeError(f"SSRF check: UPSTREAM_BASE {base_url!r} has no hostname")
+
+    # Reject known metadata hostnames by name
+    if hostname.lower() in _FORBIDDEN_HOSTNAMES:
+        raise RuntimeError(
+            f"SSRF check: UPSTREAM_BASE hostname {hostname!r} is a forbidden metadata endpoint. "
+            "Set ALLOW_PRIVATE_BASE_URL=1 to override (local dev only)."
+        )
+
+    # Resolve hostname → IP and check address category
+    try:
+        resolved_ip = socket.gethostbyname(hostname)
+    except socket.gaierror:
+        # DNS failure at startup is allowed (DNS may not be ready); check is best-effort.
+        logger.warning(f"SSRF check: could not resolve {hostname!r} at startup — skipping IP check")
+        return
+
+    try:
+        addr = ipaddress.ip_address(resolved_ip)
+    except ValueError:
+        return  # Not a valid IP string, skip
+
+    if addr.is_private or addr.is_link_local or addr.is_loopback or addr.is_reserved or addr.is_unspecified:
+        raise RuntimeError(
+            f"SSRF check: UPSTREAM_BASE {base_url!r} resolves to private/reserved address {resolved_ip}. "
+            "Set ALLOW_PRIVATE_BASE_URL=1 to override (local dev only)."
+        )
+
+_check_upstream_ssrf(UPSTREAM_BASE)
+
 logger.info(f"Provider: {LLM_PROVIDER} | Upstream: {UPSTREAM_BASE}")
 
 AUDIT_LOG_PATH = os.environ.get("AUDIT_LOG_PATH", "/logs/api-proxy-audit.jsonl")
@@ -130,59 +188,75 @@ PII_PATTERNS = [
 COMPILED_PII = [(re.compile(p), label) for p, label in PII_PATTERNS]
 
 # --- Secret Patterns (response — strip secrets before they reach the agent) ---
+# Generated from src/sdk/secret-scanner.ts via python-emitter — single source of truth.
 SECRET_PATTERNS = [
-    # API Keys
-    (r"AIza[0-9A-Za-z_-]{35}", "GOOGLE_API_KEY"),
-    (r"sk-[A-Za-z0-9]{20,}", "OPENAI_KEY"),
-    (r"sk-ant-[A-Za-z0-9-]{80,}", "ANTHROPIC_KEY"),
-    (r"\\bghp_[A-Za-z0-9]{36}\\b", "GITHUB_PAT"),
-    (r"\\bgho_[A-Za-z0-9]{36}\\b", "GITHUB_OAUTH"),
-    (r"\\bghs_[A-Za-z0-9]{36}\\b", "GITHUB_APP"),
-    (r"\\bglpat-[A-Za-z0-9_-]{20,}\\b", "GITLAB_PAT"),
-
-    # AWS
-    (r"AKIA[0-9A-Z]{16}", "AWS_ACCESS_KEY"),
-    (r"(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY)[\\s=:]+[A-Za-z0-9/+=]{40}", "AWS_SECRET_KEY"),
-
-    # Stripe
-    (r"\\b[rs]k_live_[A-Za-z0-9]{24,}\\b", "STRIPE_KEY"),
-    (r"\\b[rs]k_test_[A-Za-z0-9]{24,}\\b", "STRIPE_TEST_KEY"),
-
-    # JWT / Bearer
-    (r"eyJ[A-Za-z0-9_-]{10,}\\.eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}", "JWT"),
-
-    # Private keys
-    (r"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----", "PRIVATE_KEY"),
-
-    # Generic long hex/base64 that look like secrets
-    (r"(?:token|secret|password|apikey|api_key)\\s*[=:]\\s*['\\"\\x60]?([A-Za-z0-9+/=_-]{32,})['\\"\\x60]?", "GENERIC_SECRET"),
+${secretPatternLines}
 ]
 
-COMPILED_SECRETS = [(re.compile(p, re.IGNORECASE), label) for p, label in SECRET_PATTERNS]
+COMPILED_SECRETS = [(pattern, label) for pattern, label in SECRET_PATTERNS]
+
+
+_ZERO_WIDTH_RE = re.compile(r"[\\u200B\\u200C\\u200D\\uFEFF\\u202E]")
+
+
+def normalize_for_scan(text: str) -> str:
+    """NFKC-normalize text and strip zero-width/RTL-override chars for pattern matching.
+
+    Maps fullwidth digits (０-９→0-9), Arabic-Indic digits, fullwidth hyphens, etc.
+    to their ASCII equivalents, and removes invisible evasion characters.
+    The normalized form is used for scanning only; see callers for replacement strategy.
+    """
+    normalized = unicodedata.normalize("NFKC", text)
+    return _ZERO_WIDTH_RE.sub("", normalized)
 
 
 def redact_pii(text: str) -> tuple[str, list[dict]]:
-    """Scan text for PII and replace with [REDACTED_TYPE]. Returns (redacted_text, findings)."""
+    """Scan text for PII and replace with [REDACTED_TYPE]. Returns (redacted_text, findings).
+
+    Runs each pattern twice: first on the working string (ASCII input), then on
+    the NFKC-normalized form to catch fullwidth digits, Arabic-Indic digits, and
+    zero-width evasion characters.
+    """
     findings = []
-    redacted = text
+    working = text
     for pattern, label in COMPILED_PII:
-        matches = pattern.findall(redacted)
-        if matches:
-            findings.append({"type": label, "count": len(matches)})
-            redacted = pattern.sub(f"[REDACTED_{label}]", redacted)
-    return redacted, findings
+        count = len(pattern.findall(working))
+        if count:
+            findings.append({"type": label, "count": count})
+            working = pattern.sub(f"[REDACTED_{label}]", working)
+        # Second pass on normalized form to catch Unicode evasion
+        norm = normalize_for_scan(working)
+        if norm != working:
+            norm_count = len(pattern.findall(norm))
+            if norm_count:
+                findings.append({"type": label, "count": norm_count})
+                working = pattern.sub(f"[REDACTED_{label}]", norm)
+    return working, findings
 
 
 def scan_secrets(text: str) -> tuple[str, list[dict]]:
-    """Scan text for secrets and replace with [REDACTED_SECRET]. Returns (cleaned_text, findings)."""
+    """Scan text for secrets and replace with [REDACTED_<label>]. Returns (cleaned_text, findings).
+
+    Runs each pattern twice: first on the working string, then on the NFKC-normalized
+    form to catch fullwidth/Arabic-Indic digit evasion and zero-width chars.
+    """
     findings = []
-    cleaned = text
+    working = text
     for pattern, label in COMPILED_SECRETS:
-        matches = pattern.findall(cleaned)
+        matches = pattern.findall(working)
         if matches:
-            findings.append({"type": label, "count": len(matches) if isinstance(matches[0], str) else len(matches)})
-            cleaned = pattern.sub(f"[REDACTED_{label}]", cleaned)
-    return cleaned, findings
+            count = len(matches) if not matches or isinstance(matches[0], str) else len(matches)
+            findings.append({"type": label, "count": count})
+            working = pattern.sub(f"[REDACTED_{label}]", working)
+        # Second pass on normalized form
+        norm = normalize_for_scan(working)
+        if norm != working:
+            norm_matches = pattern.findall(norm)
+            if norm_matches:
+                norm_count = len(norm_matches) if not norm_matches or isinstance(norm_matches[0], str) else len(norm_matches)
+                findings.append({"type": label, "count": norm_count})
+                working = pattern.sub(f"[REDACTED_{label}]", norm)
+    return working, findings
 
 
 def redact_request_body(body: bytes) -> tuple[bytes, list[dict]]:
@@ -213,10 +287,21 @@ def redact_request_body(body: bytes) -> tuple[bytes, list[dict]]:
 
 
 def scan_response_body(body: bytes) -> tuple[bytes, list[dict]]:
-    """Parse JSON response, strip secrets from all text fields, return cleaned body."""
+    """Parse JSON response, strip secrets from all text fields, return cleaned body.
+
+    For non-JSON bodies (SSE streams, plain text, HTML), raw-text scanning is applied
+    so that streaming responses are never bypassed.
+    """
     try:
         data = json.loads(body)
     except (json.JSONDecodeError, UnicodeDecodeError):
+        # Non-JSON (SSE, plain text, HTML): scan raw text so secrets are never bypassed.
+        text = body.decode("utf-8", errors="replace")
+        cleaned, secret_findings = scan_secrets(text)
+        cleaned2, pii_findings = redact_pii(cleaned)
+        all_findings = secret_findings + pii_findings
+        if all_findings:
+            return cleaned2.encode("utf-8", errors="replace"), all_findings
         return body, []
 
     all_findings = []
@@ -359,9 +444,10 @@ async def proxy(request: Request, path: str):
     upstream_url = f"{UPSTREAM_BASE}/{path}"
 
     # Query string allowlist (security: only forward known-safe params, never forward "key")
+    # Use urlencode with multi_items() to handle repeated params and prevent value injection.
     allowed_qs = ACTIVE_PROVIDER.get("query_allowlist", set())
-    filtered_qs = "&".join(
-        f"{k}={v}" for k, v in request.query_params.items() if k in allowed_qs
+    filtered_qs = urlencode(
+        [(k, v) for k, v in request.query_params.multi_items() if k in allowed_qs]
     )
     if filtered_qs:
         upstream_url += f"?{filtered_qs}"
@@ -382,7 +468,7 @@ async def proxy(request: Request, path: str):
 
     start = time.monotonic()
 
-    async with httpx.AsyncClient(timeout=120.0, follow_redirects=False) as client:
+    async with httpx.AsyncClient(verify=True, trust_env=False, timeout=120.0, follow_redirects=False) as client:
         upstream_resp = await client.request(
             method=request.method,
             url=upstream_url,
@@ -420,10 +506,15 @@ async def proxy(request: Request, path: str):
         "secrets_stripped": bool(secret_findings),
     })
 
-    # Forward response headers (skip hop-by-hop)
+    # Forward response headers (skip hop-by-hop and sensitive disclosure headers)
+    SKIP_RESP_HEADERS = {
+        "transfer-encoding", "content-encoding", "content-length",
+        "set-cookie", "set-cookie2", "server", "x-powered-by",
+        "strict-transport-security",
+    }
     resp_headers = {}
     for k, v in upstream_resp.headers.items():
-        if k.lower() not in ("transfer-encoding", "content-encoding", "content-length"):
+        if k.lower() not in SKIP_RESP_HEADERS:
             resp_headers[k] = v
 
     return Response(
@@ -442,14 +533,14 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN useradd -r -s /bin/false appuser && mkdir /logs && chown appuser:appuser /logs
+RUN groupadd -g 10001 appuser && useradd -r -u 10001 -g 10001 -s /bin/false appuser && mkdir /logs && chown -R appuser:appuser /app /logs
 USER appuser
 
 COPY api_proxy.py .
 
 EXPOSE 8080
 
-CMD ["uvicorn", "api_proxy:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "api_proxy:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips=127.0.0.1"]
 `;
 }
 
@@ -457,6 +548,7 @@ export function apiProxyRequirementsTemplate(): string {
   return `fastapi==0.115.12
 uvicorn[standard]==0.34.2
 httpx==0.28.1
+certifi>=2024.2.2
 `;
 }
 
