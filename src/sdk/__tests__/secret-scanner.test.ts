@@ -52,6 +52,14 @@ describe("scanSecrets", () => {
     expect(out).not.toContain("FwoGZ");
   });
 
+  it("redacts AWS session-token env var form", () => {
+    const long = "A".repeat(110);
+    const text = `aws_session_token = ${long}`;
+    const { text: out, findings } = scanSecrets(text);
+    expect(findings.some((f) => f.type === "AWS_SESSION_TOKEN_ENV")).toBe(true);
+    expect(out).toContain("[REDACTED_AWS_SESSION_TOKEN_ENV]");
+  });
+
   it("returns empty findings for clean text", () => {
     const { findings } = scanSecrets("hello world, no secrets here");
     expect(findings).toHaveLength(0);
@@ -76,10 +84,8 @@ describe("scanResponseBody", () => {
   });
 
   it("exercises raw-text fallback path for SSE-style data", () => {
-    // SSE frames are not valid JSON — should still be scanned
     const sse = `data: {"delta":"ASIA${"C".repeat(16)}"}\ndata: [DONE]\n`;
     const { body, findings } = scanResponseBody(Buffer.from(sse));
-    // The SSE frame isn't valid JSON so raw-text path runs
     expect(findings.length).toBeGreaterThan(0);
     expect(body.toString()).not.toContain("ASIA");
   });
@@ -88,7 +94,7 @@ describe("scanResponseBody", () => {
     const payload = Buffer.from(JSON.stringify({ ok: true }));
     const { body, findings } = scanResponseBody(payload);
     expect(findings).toHaveLength(0);
-    expect(body).toBe(payload); // same reference — no copy
+    expect(body).toBe(payload);
   });
 
   it("redacts AWS session token in JSON response", () => {

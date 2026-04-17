@@ -41,11 +41,10 @@ export const defaultSecretPatterns: SecretPatternGroup[] = [
         regex: /(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY)[\s=:]+[A-Za-z0-9/+=]{40}/gi,
         replacement: "[REDACTED_AWS_SECRET_KEY]",
       },
-      { name: "AWS_STS_TOKEN", regex: /ASIA[0-9A-Z]{16}/g, replacement: "[REDACTED_AWS_STS_TOKEN]" },
       {
-        name: "AWS_SESSION_TOKEN",
+        name: "AWS_SESSION_TOKEN_ENV",
         regex: /(?:aws_session_token|AWS_SESSION_TOKEN)[\s=:]+[A-Za-z0-9/+=]{100,}/gi,
-        replacement: "[REDACTED_AWS_SESSION_TOKEN]",
+        replacement: "[REDACTED_AWS_SESSION_TOKEN_ENV]",
       },
     ],
   },
