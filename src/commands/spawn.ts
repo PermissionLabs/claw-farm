@@ -12,11 +12,12 @@ export async function spawnCommand(args: string[]): Promise<void> {
   }
 
   const userIdx = args.indexOf("--user");
-  if (userIdx === -1 || !args[userIdx + 1]) {
+  const userIdRaw = userIdx !== -1 ? args[userIdx + 1] : undefined;
+  if (!userIdRaw) {
     console.error("Missing --user <id>");
     process.exit(1);
   }
-  const userId = args[userIdx + 1];
+  const userId = userIdRaw;
 
   // Validate userId early for better CLI error messages
   if (!SAFE_NAME_REGEX.test(userId)) {
@@ -30,13 +31,15 @@ export async function spawnCommand(args: string[]): Promise<void> {
   if (ctxIdx !== -1) {
     // Consume all following args until the next flag or end
     for (let i = ctxIdx + 1; i < args.length; i++) {
-      if (args[i].startsWith("--")) break;
-      const eqIdx = args[i].indexOf("=");
+      const arg = args[i];
+      if (arg === undefined) continue;
+      if (arg.startsWith("--")) break;
+      const eqIdx = arg.indexOf("=");
       if (eqIdx === -1) {
-        console.error(`Invalid context pair: "${args[i]}". Use key=value format.`);
+        console.error(`Invalid context pair: "${arg}". Use key=value format.`);
         process.exit(1);
       }
-      contextMap[args[i].slice(0, eqIdx)] = args[i].slice(eqIdx + 1);
+      contextMap[arg.slice(0, eqIdx)] = arg.slice(eqIdx + 1);
     }
   }
 

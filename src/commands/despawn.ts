@@ -9,11 +9,12 @@ export async function despawnCommand(args: string[]): Promise<void> {
   }
 
   const userIdx = args.indexOf("--user");
-  if (userIdx === -1 || !args[userIdx + 1]) {
+  const userIdRaw = userIdx !== -1 ? args[userIdx + 1] : undefined;
+  if (!userIdRaw) {
     console.error("Missing --user <id>");
     process.exit(1);
   }
-  const userId = args[userIdx + 1];
+  const userId = userIdRaw;
   const keepData = args.includes("--keep-data");
 
   // Validate userId early for better CLI error messages

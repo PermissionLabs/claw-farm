@@ -361,6 +361,7 @@ export async function migrateRuntimeCommand(args: string[]): Promise<void> {
     const instanceIds = Object.keys(instances);
     for (const userId of instanceIds) {
       const inst = instances[userId];
+      if (!inst) continue;
       console.log(`\n  ■ Migrating instance "${userId}"...`);
       await migrateInstance(
         projectDir,

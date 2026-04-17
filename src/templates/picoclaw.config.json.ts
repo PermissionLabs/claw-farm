@@ -40,6 +40,7 @@ export function picoClawConfigTemplate(
   };
 
   const config = providerConfigs[llm];
+  if (!config) throw new Error(`Unknown LLM provider: "${llm}"`);
 
   return JSON.stringify(
     {

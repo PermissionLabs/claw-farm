@@ -350,9 +350,11 @@ async function initMulti(
   // Set multiInstance in registry
   await withLock(async () => {
     const reg = await loadRegistry();
-    reg.projects[name].multiInstance = true;
-    reg.projects[name].instances = {};
-    reg.projects[name].runtime = runtimeType;
+    const proj = reg.projects[name];
+    if (!proj) throw new Error(`Project "${name}" not found in registry after addProject`);
+    proj.multiInstance = true;
+    proj.instances = {};
+    proj.runtime = runtimeType;
     await saveRegistry(reg);
   });
   console.log(`✓ Registered in global registry (port: ${entry.port}, multi-instance)`);

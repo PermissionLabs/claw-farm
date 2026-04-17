@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { resolveProjectName, findPositionalArg } from "../lib/registry.ts";
 import { readProjectConfig, resolveRuntimeConfig } from "../lib/config.ts";
 import { instanceDir } from "../lib/instance.ts";

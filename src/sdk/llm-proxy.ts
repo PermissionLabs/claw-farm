@@ -210,8 +210,8 @@ export function createLlmProxy(options: LlmProxyOptions) {
     // --- Compose middleware chain (onion model) ---
     let index = 0;
     function dispatch(): Promise<ProxyResponse> {
-      if (index < pipeline.length) {
-        const mw = pipeline[index++];
+      const mw = pipeline[index++];
+      if (mw !== undefined) {
         return mw(ctx, dispatch);
       }
       return upstreamFetch();

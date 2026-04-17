@@ -1,4 +1,4 @@
-import { loadRegistry } from "../lib/registry.ts";
+import { loadRegistry, type ProjectEntry } from "../lib/registry.ts";
 import { getComposeStatus } from "../lib/compose.ts";
 
 export async function listCommand(): Promise<void> {
@@ -16,11 +16,13 @@ export async function listCommand(): Promise<void> {
   console.log("│ Name         │ Runtime  │ Port    │ Status    │ Instances  │ Path                           │");
   console.log("├──────────────┼──────────┼─────────┼───────────┼────────────┼────────────────────────────────┤");
 
-  const rows = await Promise.all(names.map(async (name) => {
+  const rowsRaw = await Promise.all(names.map(async (name) => {
     const entry = reg.projects[name];
+    if (!entry) return null;
     const status = await getComposeStatus(entry.path);
     return { name, entry, status };
   }));
+  const rows = rowsRaw.filter((r) => r !== null) as Array<{ name: string; entry: ProjectEntry; status: "running" | "stopped" | "unknown" }>;
 
   for (const { name, entry, status } of rows) {
     const statusIcon = status === "running" ? "🟢" : status === "stopped" ? "⚪" : "❓";

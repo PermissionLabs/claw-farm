@@ -1,7 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect } from "bun:test";
 import { join } from "node:path";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 
 // withLock uses REGISTRY_DIR based on homedir — we patch the lock path via
 // a temp dir by monkey-patching the module. Since Bun doesn't support jest.mock,

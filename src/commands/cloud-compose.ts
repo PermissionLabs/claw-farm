@@ -45,6 +45,7 @@ export async function cloudComposeCommand(args: string[]): Promise<void> {
   for (const name of names) {
     safeYamlIdentifier(name, "project name");
     const entry = reg.projects[name];
+    if (!entry) continue;
     const config = await readProjectConfig(entry.path);
     const processor = config?.processor ?? entry.processor;
     const { runtimeType, proxyMode } = resolveRuntimeConfig(config, entry);
@@ -305,6 +306,7 @@ ${nginxProjects.map((p) => `      ${p.containerName}:\n        condition: servic
   }
   for (const p of nginxProjects) {
     const entry = reg.projects[p.name];
+    if (!entry) continue;
     const processor = (await readProjectConfig(entry.path))?.processor ?? entry.processor;
     if (p.proxyMode !== "none") {
       networks += `  ${p.name}-proxy-net:\n    internal: true\n`;

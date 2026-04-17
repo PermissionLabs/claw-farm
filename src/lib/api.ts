@@ -25,8 +25,6 @@ import { instanceComposeTemplate } from "../templates/docker-compose.instance.ym
 import { fillUserTemplate } from "../templates/USER.template.md.ts";
 import { runCompose, COMPOSE_FILENAME } from "./compose.ts";
 import { migrateToMulti } from "./migrate.ts";
-import { getRuntime } from "../runtimes/index.ts";
-import type { RuntimeType, ProxyMode } from "../runtimes/interface.ts";
 
 export type { InstanceEntry, ProjectEntry };
 export { getInstance, getProject };

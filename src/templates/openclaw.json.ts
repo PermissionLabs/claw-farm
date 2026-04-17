@@ -3,7 +3,7 @@
  * Routes LLM calls through api-proxy (no direct API key access).
  */
 export function openclawConfigTemplate(
-  name: string,
+  _name: string,
   processor: "builtin" | "mem0",
   llm: "gemini" | "anthropic" | "openai-compat" = "gemini",
 ): string {
@@ -29,6 +29,7 @@ export function openclawConfigTemplate(
   };
 
   const config = providerConfigs[llm];
+  if (!config) throw new Error(`Unknown LLM provider: "${llm}"`);
 
   // Output valid JSON (no comments) so JSON.parse works in config merge
   return JSON.stringify(
