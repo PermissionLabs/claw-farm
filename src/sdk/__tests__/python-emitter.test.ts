@@ -67,7 +67,7 @@ describe("emitPythonSecretPatterns", () => {
 
   it("includes AWS STS patterns", () => {
     const out = emitPythonSecretPatterns(defaultSecretPatterns);
-    expect(out).toContain("AWS_STS_TOKEN");
+    expect(out).toContain("AWS_TEMP_ACCESS_KEY");
     expect(out).toContain("AWS_SESSION_TOKEN");
   });
 
