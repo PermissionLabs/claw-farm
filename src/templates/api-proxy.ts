@@ -35,12 +35,15 @@ OpenClaw → http://api-proxy:8080/... → (redact + key inject) → LLM API
 """
 
 import hashlib
+import hmac as hmac_mod
 import ipaddress
 import json
 import logging
+import logging.handlers
 import os
 import re
 import socket
+import stat
 import time
 import unicodedata
 from datetime import datetime, timezone
@@ -162,6 +165,39 @@ logger.info(f"Provider: {LLM_PROVIDER} | Upstream: {UPSTREAM_BASE}")
 
 AUDIT_LOG_PATH = os.environ.get("AUDIT_LOG_PATH", "/logs/api-proxy-audit.jsonl")
 MAX_PROMPT_SIZE_MB = int(os.environ.get("MAX_PROMPT_SIZE_MB", "5"))
+
+# --- Audit log setup (BKLG-007): rotating handler + HMAC chain + 0o600 permissions ---
+AUDIT_LOG_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+AUDIT_LOG_BACKUP_COUNT = 5
+AUDIT_HMAC_KEY = os.environ.get("AUDIT_LOG_HMAC_KEY", "")
+if not AUDIT_HMAC_KEY:
+    logger.warning("AUDIT_LOG_HMAC_KEY is not set — HMAC integrity chain is disabled")
+
+# Ensure parent directory exists with 0o700
+_audit_log_dir = os.path.dirname(AUDIT_LOG_PATH)
+if _audit_log_dir:
+    os.makedirs(_audit_log_dir, mode=0o700, exist_ok=True)
+
+_audit_handler = logging.handlers.RotatingFileHandler(
+    AUDIT_LOG_PATH,
+    maxBytes=AUDIT_LOG_MAX_BYTES,
+    backupCount=AUDIT_LOG_BACKUP_COUNT,
+    encoding="utf-8",
+)
+_audit_logger = logging.getLogger("audit")
+_audit_logger.addHandler(_audit_handler)
+_audit_logger.setLevel(logging.INFO)
+_audit_logger.propagate = False
+
+# Rolling HMAC chain state
+_audit_prev_hmac: str = ""
+
+def _set_audit_log_perms() -> None:
+    """Set audit log file to mode 0o600 if it exists."""
+    try:
+        os.chmod(AUDIT_LOG_PATH, stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
 
 # PII_MODE: "redact" (default) | "block" | "warn"
 PII_MODE = os.environ.get("PII_MODE", "redact")
@@ -333,11 +369,24 @@ def check_content_size(body: bytes) -> bool:
 
 
 def audit_log(entry: dict):
-    """Append audit entry to JSONL log."""
+    """Append audit entry to JSONL log with HMAC chain and 0o600 permissions."""
+    global _audit_prev_hmac
     try:
         entry["timestamp"] = datetime.now(timezone.utc).isoformat()
-        with open(AUDIT_LOG_PATH, "a") as f:
-            f.write(json.dumps(entry) + "\\n")
+        base_json = json.dumps(entry)
+        if AUDIT_HMAC_KEY:
+            mac = hmac_mod.new(
+                AUDIT_HMAC_KEY.encode("utf-8"),
+                (_audit_prev_hmac + base_json).encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            _audit_prev_hmac = mac
+            entry_with_hmac = {**entry, "hmac": mac}
+            line = json.dumps(entry_with_hmac)
+        else:
+            line = base_json
+        _audit_handler.emit(logging.makeLogRecord({"msg": line, "levelno": logging.INFO, "levelname": "INFO"}))
+        _set_audit_log_perms()
     except Exception:
         logger.exception("Failed to write audit log")
 
