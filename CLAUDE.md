@@ -54,6 +54,9 @@ claw-farm CLI
   │     ├── pii-redactor, secret-scanner, audit-logger   # Standalone + middleware
   │     ├── llm-proxy         # Pipeline engine (Koa-style onion middleware)
   │     ├── patterns/         # PII pattern groups (korean, us, financial, universal)
+  │     │     ├── secrets.ts          # Single source of truth for secret patterns
+  │     │     └── python-emitter.ts   # Serializes TS patterns → Python regex literals
+  │     ├── lib/url-safety.ts         # SSRF validation (validateUpstreamUrl)
   │     └── providers/        # LLM providers (gemini, anthropic, openrouter, openai-compat)
   └── .claude/skills/  # Claude Code skills for AI agent integration
         ├── claw-farm-cli/   # CLI command reference (all commands, flags, runtime comparison)
@@ -96,8 +99,11 @@ bun run src/index.ts cloud:compose [outfile]       # Generate cloud compose
 ```bash
 bun install              # Install dev deps (bun-types, typescript)
 bun run typecheck        # tsc --noEmit
+bun test                 # Run all tests
 bun run src/index.ts     # Run CLI
 ```
+
+CI runs typecheck + test + build on every PR (see `.github/workflows/ci.yml`).
 
 ## SDK (Security Modules)
 

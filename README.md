@@ -82,7 +82,7 @@ See [Getting Started Guide](docs/getting-started.md) for the full walkthrough.
 
 ## SDK (Security Modules)
 
-For projects with their own server (`proxyMode: "none"`), import the same security guards as TypeScript:
+For projects with their own server (`proxyMode: "none"`), import the same security guards as TypeScript. The SDK includes SSRF validation (`validateUpstreamUrl`) on all upstream URLs and NFKC-normalized PII scanning that handles fullwidth digits, zero-width characters, and RTL overrides:
 
 ```typescript
 import {

@@ -202,7 +202,80 @@ openclaw security audit --json       # Machine-readable output
 
 ---
 
-## 8. proxyMode Security Implications
+## 8. Security Hardening — Review 4.7
+
+The following sections document controls added in the April 2026 security sweep. Each item is tied to a specific backlog item (BKLG-NNN) and corresponds to shipped code.
+
+### SSRF hardening (BKLG-003)
+
+`src/sdk/lib/url-safety.ts` exports `validateUpstreamUrl(url, opts?)`. Every LLM provider factory (`gemini`, `openaiCompat`) and `llm-proxy.ts` call this before issuing upstream requests. The validator:
+
+- Requires HTTPS in production (HTTP is allowed only when `ALLOW_PRIVATE_BASE_URL=1` is set).
+- Resolves the hostname via DNS and rejects any address in private/reserved ranges: `127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16` (IMDS), `::1`, `fc00::/7`, `fd00::/8`.
+- Blocks the AWS EC2 metadata endpoint (`169.254.169.254`) explicitly.
+- Mirrors the same check in the Python api-proxy using `ipaddress` + `socket.gethostbyname`.
+
+**Escape hatch:** Set `ALLOW_PRIVATE_BASE_URL=1` in the `.env` to allow loopback/private targets (local dev only — never in production).
+
+**Why:** Without this check, a misconfigured or malicious `OPENAI_COMPAT_BASE_URL` can pivot the proxy into IMDS credential theft or internal-network reconnaissance. The egress-net container has outbound access, so the exposure is real in cloud deployments.
+
+### PII redaction — Unicode handling (BKLG-002)
+
+All PII and secret-scan paths now run a normalization step before pattern matching:
+
+1. **NFKC normalization** — `text.normalize("NFKC")` in TS, `unicodedata.normalize("NFKC", text)` in Python — maps fullwidth digits (e.g. `９１０１０１`) and fullwidth hyphens (`\uFF0D`) to their ASCII equivalents before the regex runs.
+2. **Zero-width and RTL override strip** — Characters `\u200B \u200C \u200D \uFEFF \u202E` are stripped from the matching copy. This prevents evasion by inserting invisible characters inside a Korean RRN or credit card number.
+3. **Double-pass scan strategy** — Normalization runs on a copy; the match positions are mapped back to the original string for replacement, so the output text is not modified beyond redaction.
+
+**Known limitation:** If a zero-width character falls at a regex boundary (e.g., between the digit group and the separator), the strip removes it and the pattern matches correctly. However, if zero-width characters split a digit sequence that a pattern requires to be contiguous (e.g., `880101\u200B-1234567`), the normalization copy strips the ZWJ but the separator `-` is still ASCII, so the match succeeds. Prefix-breaking ZWCs (one inside the digit run itself) will defeat matching on the copy as well — this is a documented limitation and not fixed in this sweep.
+
+### Secret scanning — single source of truth (BKLG-001)
+
+Previously, secret patterns existed in two independent places: `src/sdk/secret-scanner.ts` (TypeScript) and inline inside `src/templates/api-proxy.ts` (Python string literals). The two sets had diverged: the Python proxy had no SSE/streaming fallback, and the TS SDK had no AWS STS session-token patterns.
+
+**Current state:**
+
+- `src/sdk/patterns/secrets.ts` is the canonical pattern source (TypeScript).
+- `src/sdk/patterns/python-emitter.ts` serializes those patterns to Python-compatible regex literals at build time, keeping the Python proxy in sync from a single definition.
+- The Python api-proxy now has a raw-text fallback: when `json.loads` fails (SSE `text/event-stream`, non-JSON error pages), the body is scanned as raw text rather than silently passed through.
+- The TS SDK `llm-proxy.ts` always runs a raw-text scan after the JSON parse attempt, regardless of whether JSON parse succeeded.
+
+**AWS STS patterns** (BKLG-020): `AWS_SESSION_TOKEN` and temporary access keys (`ASIA…` prefix) are now included in the shared pattern set.
+
+### File permissions — `writeSecret` helper (BKLG-010)
+
+Any file that contains secrets (`.env`, registry entries, per-instance config) is now written through `writeSecret(path, content)` in `src/lib/fs-utils.ts`. This helper:
+
+- Writes to a temp file first (`path + ".tmp"`), then atomically renames to the target.
+- Sets permissions to `0o600` (owner read/write only) before the rename.
+- Prevents a TOCTOU window where a partially written file is world-readable.
+
+Previously, `init` and `--multi` paths wrote `.env.example` and `.env` without setting permissions.
+
+### TLS verification (BKLG-021)
+
+The Python api-proxy uses `httpx.AsyncClient` with explicit `verify=True, trust_env=False, follow_redirects=False`. `trust_env=False` prevents `HTTPS_PROXY`, `SSL_CERT_FILE`, and similar environment variables from silently downgrading TLS verification. A `certifi` import assertion runs at startup to fail fast if the CA bundle is missing from the image.
+
+### Container hardening (BKLG-024)
+
+- **Pinned UID/GID 10001:** `api-proxy` and `mem0` Dockerfiles create a non-root user with `useradd -u 10001 -g 10001 appuser`. Pinning prevents accidental UID collisions with host users.
+- **`init: true` on api-proxy and mem0:** Adds a minimal init process (PID 1) so SIGTERM propagates correctly to the Python process. Without it, `docker stop` times out and sends SIGKILL, which can corrupt in-flight audit log writes.
+- `uvicorn` is started with `--proxy-headers` to correctly read `X-Forwarded-For` when behind nginx.
+
+### Header and query smuggling (BKLG-011)
+
+- **Outbound query string:** The Python proxy now uses `urllib.parse.urlencode(params, doseq=True)` (multi-value aware) instead of manual string concatenation, preventing `%0A`-injection that could add extra query parameters.
+- **Response header strip:** `Set-Cookie`, `Server`, `X-Powered-By`, and `X-Forwarded-*` are stripped from upstream LLM responses before they reach the agent. The agent should never receive session cookies or server fingerprinting headers from the LLM provider.
+- **Inbound hop-by-hop headers** (`Connection`, `Upgrade`, `Keep-Alive`, `Transfer-Encoding`) are removed from the forwarded request.
+- The TS SDK `llm-proxy.ts` applies the same outbound strip list.
+
+### Rate limiting — per-tenant nginx zones (BKLG-026)
+
+The nginx config generated by `cloud:compose` uses `$binary_remote_addr$host` as the rate-limit zone key instead of `$binary_remote_addr` alone. This gives each tenant (host) its own budget, preventing one tenant's traffic from exhausting the shared zone and rate-limiting other tenants. The zone size and rate remain configurable via the `NGINX_RATE_LIMIT` env var.
+
+---
+
+## 9. proxyMode Security Implications
 
 claw-farm supports two api-proxy deployment modes via the `--proxy-mode` flag. The choice has direct security implications.
 
