@@ -1,18 +1,16 @@
 import { join } from "node:path";
-import { mkdir, readdir, cp, rename, rm } from "node:fs/promises";
+import { mkdir, readdir, cp, rm } from "node:fs/promises";
 import { resolveProjectName, findPositionalArg, type ProjectEntry } from "../lib/registry.ts";
 import { copyTemplateFiles } from "../lib/api.ts";
-import { readProjectConfig, resolveRuntimeConfig, mergeOpenclawConfig, envExampleTemplate } from "../lib/config.ts";
+import { readProjectConfig, resolveRuntimeConfig, envExampleTemplate } from "../lib/config.ts";
 import { ensureRawDirs } from "../lib/raw-collector.ts";
 import { ensureTemplateDirs, ensureInstanceDirs, templateDir, instanceDir } from "../lib/instance.ts";
-import { baseComposeTemplate } from "../templates/docker-compose.yml.ts";
 import { mem0ComposeTemplate } from "../templates/docker-compose.mem0.yml.ts";
 import { instanceComposeTemplate } from "../templates/docker-compose.instance.yml.ts";
-import { openclawConfigTemplate } from "../templates/openclaw.json.ts";
 import { policyTemplate } from "../templates/policy.yaml.ts";
 import { writeApiProxyFiles } from "../templates/api-proxy.ts";
 import { getRuntime, type RuntimeType, type ProxyMode } from "../runtimes/index.ts";
-import { fileExists, dirExists } from "../lib/fs-utils.ts";
+import { fileExists } from "../lib/fs-utils.ts";
 import { COMPOSE_FILENAME } from "../lib/compose.ts";
 
 async function moveContents(srcDir: string, destDir: string): Promise<void> {
@@ -334,6 +332,7 @@ async function upgradeMultiInstance(
     let migratedCount = 0;
     for (const userId of instanceIds) {
       const inst = instances[userId];
+      if (!inst) continue;
       const instDir = instanceDir(projectDir, userId);
 
       // Migrate old layout → new layout if needed (OpenClaw only)
