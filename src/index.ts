@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { CliError } from "./lib/cli-parser.ts";
 import { initCommand } from "./commands/init.ts";
 import { upCommand } from "./commands/up.ts";
 import { downCommand } from "./commands/down.ts";
@@ -116,6 +117,10 @@ async function main() {
         process.exit(1);
     }
   } catch (err) {
+    if (err instanceof CliError) {
+      console.error(`\nError: ${err.message}\n`);
+      process.exit(2);
+    }
     console.error(`\n❌ Error: ${(err as Error).message}\n`);
     process.exit(1);
   }

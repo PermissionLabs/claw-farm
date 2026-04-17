@@ -14,6 +14,7 @@ import { mem0Processor } from "../processors/mem0.ts";
 import { ensureTemplateDirs, templateDir } from "../lib/instance.ts";
 import { userTemplateContent } from "../templates/USER.template.md.ts";
 import { getRuntime, type RuntimeType, type ProxyMode } from "../runtimes/index.ts";
+import { parseEnumFlag, hasFlag } from "../lib/cli-parser.ts";
 
 export async function initCommand(args: string[]): Promise<void> {
   const name = findPositionalArg(args);
@@ -29,60 +30,18 @@ export async function initCommand(args: string[]): Promise<void> {
   }
 
   const VALID_PROCESSORS = ["builtin", "mem0"] as const;
-  const processorIdx = args.indexOf("--processor");
-  const processorArg = processorIdx !== -1 ? args[processorIdx + 1] : undefined;
-  if (processorIdx !== -1 && (!processorArg || processorArg.startsWith("-"))) {
-    console.error(`Missing value for --processor. Must be one of: ${VALID_PROCESSORS.join(", ")}`);
-    process.exit(1);
-  }
-  const processor: "builtin" | "mem0" = (processorArg as "builtin" | "mem0") ?? "builtin";
-  if (processorIdx !== -1 && !VALID_PROCESSORS.includes(processor)) {
-    console.error(`Invalid processor: "${processor}". Must be one of: ${VALID_PROCESSORS.join(", ")}`);
-    process.exit(1);
-  }
+  const processor = parseEnumFlag(args, "--processor", VALID_PROCESSORS, "builtin");
 
   const VALID_LLM_PROVIDERS = ["gemini", "anthropic", "openai-compat"] as const;
-  const llmIdx = args.indexOf("--llm");
-  const llmArg = llmIdx !== -1 ? args[llmIdx + 1] : undefined;
-  if (llmIdx !== -1 && (!llmArg || llmArg.startsWith("-"))) {
-    console.error(`Missing value for --llm. Must be one of: ${VALID_LLM_PROVIDERS.join(", ")}`);
-    process.exit(1);
-  }
-  const llm: LlmProvider = (llmArg as LlmProvider) ?? "gemini";
-  if (llmIdx !== -1 && !VALID_LLM_PROVIDERS.includes(llm)) {
-    console.error(`Invalid LLM provider: "${llm}". Must be one of: ${VALID_LLM_PROVIDERS.join(", ")}`);
-    process.exit(1);
-  }
+  const llm = parseEnumFlag(args, "--llm", VALID_LLM_PROVIDERS, "gemini") as LlmProvider;
 
-  // Parse --runtime flag
   const VALID_RUNTIMES = ["openclaw", "picoclaw"] as const;
-  const runtimeIdx = args.indexOf("--runtime");
-  const runtimeArg = runtimeIdx !== -1 ? args[runtimeIdx + 1] : undefined;
-  if (runtimeIdx !== -1 && (!runtimeArg || runtimeArg.startsWith("-"))) {
-    console.error(`Missing value for --runtime. Must be one of: ${VALID_RUNTIMES.join(", ")}`);
-    process.exit(1);
-  }
-  const runtimeType: RuntimeType = (runtimeArg as RuntimeType) ?? "openclaw";
-  if (runtimeIdx !== -1 && !(VALID_RUNTIMES as readonly string[]).includes(runtimeType)) {
-    console.error(`Invalid runtime: "${runtimeType}". Must be one of: ${VALID_RUNTIMES.join(", ")}`);
-    process.exit(1);
-  }
+  const runtimeType = parseEnumFlag(args, "--runtime", VALID_RUNTIMES, "openclaw") as RuntimeType;
 
   const runtime = getRuntime(runtimeType);
 
-  // Parse --proxy-mode flag
   const VALID_PROXY_MODES = ["shared", "per-instance", "none"] as const;
-  const proxyModeIdx = args.indexOf("--proxy-mode");
-  const proxyModeArg = proxyModeIdx !== -1 ? args[proxyModeIdx + 1] : undefined;
-  if (proxyModeIdx !== -1 && (!proxyModeArg || proxyModeArg.startsWith("-"))) {
-    console.error(`Missing value for --proxy-mode. Must be one of: ${VALID_PROXY_MODES.join(", ")}`);
-    process.exit(1);
-  }
-  const proxyMode = (proxyModeArg as ProxyMode) ?? runtime.defaultProxyMode;
-  if (proxyModeIdx !== -1 && !(VALID_PROXY_MODES as readonly string[]).includes(proxyMode)) {
-    console.error(`Invalid proxy mode: "${proxyMode}". Must be one of: ${VALID_PROXY_MODES.join(", ")}`);
-    process.exit(1);
-  }
+  const proxyMode = parseEnumFlag(args, "--proxy-mode", VALID_PROXY_MODES, runtime.defaultProxyMode);
 
   // Block unsupported combinations
   if (processor === "mem0" && runtimeType === "picoclaw") {
@@ -91,8 +50,8 @@ export async function initCommand(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const existing = args.includes("--existing");
-  const multi = args.includes("--multi");
+  const existing = hasFlag(args, "--existing");
+  const multi = hasFlag(args, "--multi");
   const projectDir = process.cwd();
 
   if (existing) {

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { mkdir, readdir, cp } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import {
   resolveProjectName,
   loadRegistry,
@@ -11,21 +11,8 @@ import { runCompose, COMPOSE_FILENAME } from "../lib/compose.ts";
 import { instanceDir, templateDir, ensureInstanceDirs } from "../lib/instance.ts";
 import { getRuntime, type RuntimeType, type ProxyMode } from "../runtimes/index.ts";
 import { policyTemplate } from "../templates/policy.yaml.ts";
-import { fileExists, copyIfExists } from "../lib/fs-utils.ts";
-
-async function copyDirContents(srcDir: string, destDir: string): Promise<void> {
-  let files: string[];
-  try {
-    files = await readdir(srcDir);
-  } catch {
-    return; // Source doesn't exist
-  }
-  if (files.length === 0) return;
-  await mkdir(destDir, { recursive: true });
-  for (const file of files) {
-    await cp(join(srcDir, file), join(destDir, file), { recursive: true });
-  }
-}
+import { fileExists, copyIfExists, copyDirContents } from "../lib/fs-utils.ts";
+import { parseEnumFlag } from "../lib/cli-parser.ts";
 
 /**
  * Migrate a single-instance project's workspace files from one runtime to another.
@@ -232,27 +219,19 @@ export async function migrateRuntimeCommand(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  // Parse --to flag
-  const toIdx = args.indexOf("--to");
-  if (toIdx === -1 || !args[toIdx + 1]) {
+  // Parse --to flag (required)
+  const VALID_RUNTIMES = ["openclaw", "picoclaw"] as const;
+  if (!args.includes("--to")) {
     console.error("Missing --to <runtime>. Must be one of: openclaw, picoclaw");
     process.exit(1);
   }
-  const targetRuntimeType = args[toIdx + 1] as RuntimeType;
+  const targetRuntimeType = parseEnumFlag(args, "--to", VALID_RUNTIMES, "openclaw") as RuntimeType;
 
-  const VALID_RUNTIMES: readonly RuntimeType[] = ["openclaw", "picoclaw"];
-  if (!VALID_RUNTIMES.includes(targetRuntimeType)) {
-    console.error(`Invalid runtime: "${targetRuntimeType}". Must be one of: ${VALID_RUNTIMES.join(", ")}`);
-    process.exit(1);
-  }
-
-  // Parse --proxy-mode flag
-  const proxyModeIdx = args.indexOf("--proxy-mode");
-  const proxyModeArg = proxyModeIdx !== -1 ? args[proxyModeIdx + 1] : undefined;
-  if (proxyModeIdx !== -1 && (!proxyModeArg || proxyModeArg.startsWith("-"))) {
-    console.error("Missing value for --proxy-mode. Must be one of: shared, per-instance");
-    process.exit(1);
-  }
+  // Parse --proxy-mode flag (optional)
+  const VALID_PROXY_MODES = ["shared", "per-instance", "none"] as const;
+  const proxyModeArg = args.includes("--proxy-mode")
+    ? parseEnumFlag(args, "--proxy-mode", VALID_PROXY_MODES, "per-instance")
+    : undefined;
 
   // Resolve project
   const { name: projectName, entry } = await resolveProjectName(projectArg);
