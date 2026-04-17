@@ -21,7 +21,6 @@ import {
 import { readProjectConfig, resolveRuntimeConfig } from "./config.ts";
 import { fileExists } from "./fs-utils.ts";
 import { ensureInstanceDirs, instanceDir, templateDir } from "./instance.ts";
-import { instanceComposeTemplate } from "../templates/docker-compose.instance.yml.ts";
 import { fillUserTemplate } from "../templates/USER.template.md.ts";
 import { runCompose, COMPOSE_FILENAME } from "./compose.ts";
 import { migrateToMulti } from "./migrate.ts";
@@ -149,12 +148,7 @@ export async function spawn(options: {
     await Bun.write(join(instDir, "instance.env"), envContent);
 
     // Write compose (always regenerate)
-    let composeContent: string;
-    if (runtimeType === "openclaw") {
-      composeContent = instanceComposeTemplate(projectName, userId, port, proxyMode);
-    } else {
-      composeContent = runtime.instanceComposeTemplate(projectName, userId, port, proxyMode);
-    }
+    const composeContent = runtime.instanceComposeTemplate(projectName, userId, port, proxyMode);
     const composePath = join(instDir, COMPOSE_FILENAME);
     await Bun.write(composePath, composeContent);
 
