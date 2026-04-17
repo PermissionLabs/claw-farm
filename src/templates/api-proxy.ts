@@ -38,7 +38,7 @@ import os
 import re
 import time
 from datetime import datetime, timezone
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
 
 try:
     import certifi
@@ -366,9 +366,10 @@ async def proxy(request: Request, path: str):
     upstream_url = f"{UPSTREAM_BASE}/{path}"
 
     # Query string allowlist (security: only forward known-safe params, never forward "key")
+    # Use urlencode with multi_items() to handle repeated params and prevent value injection.
     allowed_qs = ACTIVE_PROVIDER.get("query_allowlist", set())
-    filtered_qs = "&".join(
-        f"{k}={v}" for k, v in request.query_params.items() if k in allowed_qs
+    filtered_qs = urlencode(
+        [(k, v) for k, v in request.query_params.multi_items() if k in allowed_qs]
     )
     if filtered_qs:
         upstream_url += f"?{filtered_qs}"
@@ -427,10 +428,15 @@ async def proxy(request: Request, path: str):
         "secrets_stripped": bool(secret_findings),
     })
 
-    # Forward response headers (skip hop-by-hop)
+    # Forward response headers (skip hop-by-hop and sensitive disclosure headers)
+    SKIP_RESP_HEADERS = {
+        "transfer-encoding", "content-encoding", "content-length",
+        "set-cookie", "set-cookie2", "server", "x-powered-by",
+        "strict-transport-security",
+    }
     resp_headers = {}
     for k, v in upstream_resp.headers.items():
-        if k.lower() not in ("transfer-encoding", "content-encoding", "content-length"):
+        if k.lower() not in SKIP_RESP_HEADERS:
             resp_headers[k] = v
 
     return Response(

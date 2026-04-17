@@ -124,10 +124,13 @@ export function createLlmProxy(options: LlmProxyOptions) {
         }
       }
 
-      // Forward only safe headers
+      // Forward only safe headers; strip x-forwarded-* variants to prevent
+      // header smuggling where an internal header could influence upstream routing.
       const fetchHeaders: Record<string, string> = {};
       for (const [k, v] of Object.entries(ctx.headers)) {
-        if (forwardHeaders.has(k.toLowerCase())) {
+        const lower = k.toLowerCase();
+        if (lower.startsWith("x-forwarded-")) continue;
+        if (forwardHeaders.has(lower)) {
           fetchHeaders[k] = v;
         }
       }
@@ -187,11 +190,16 @@ export function createLlmProxy(options: LlmProxyOptions) {
         }
       }
 
-      // Forward response headers (skip hop-by-hop)
+      // Forward response headers (skip hop-by-hop and sensitive disclosure headers)
       const skipHeaders = new Set([
         "transfer-encoding",
         "content-encoding",
         "content-length",
+        "set-cookie",
+        "set-cookie2",
+        "server",
+        "x-powered-by",
+        "strict-transport-security",
       ]);
       const respHeaders: Record<string, string> = {};
       response.headers.forEach((v, k) => {
