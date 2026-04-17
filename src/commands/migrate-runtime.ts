@@ -285,18 +285,19 @@ export async function migrateRuntimeCommand(args: string[]): Promise<void> {
             projectName: `${projectName}-${uid}`,
           });
         } catch {
-          // Best effort
+          // intentional: best-effort container stop before migration
         }
       }
     } else {
       try {
         await runCompose(projectDir, "down");
       } catch {
-        // Best effort — compose file may not exist yet
+        // intentional: best-effort container stop (compose file may not exist)
       }
     }
     console.log("✓ Containers stopped\n");
   } catch {
+    // intentional: best-effort container stop — migration proceeds regardless
     console.log("✓ No containers running (or already stopped)\n");
   }
 
