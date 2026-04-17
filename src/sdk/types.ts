@@ -100,4 +100,11 @@ export interface LlmProxyOptions {
   timeout?: number;
   maxSizeMb?: number;
   forwardHeaders?: Set<string>;
+  /**
+   * Options forwarded to validateUpstreamUrl for SSRF protection.
+   * In production leave unset (default: deny private/loopback).
+   * In tests, supply { resolveHost: async () => [] } to skip real DNS.
+   * Set allowPrivate/allowLoopback to opt-in to non-public upstreams.
+   */
+  ssrfOptions?: import("./lib/url-safety.ts").UrlSafetyOptions;
 }

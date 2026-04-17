@@ -1,6 +1,7 @@
 // LLM Proxy pipeline engine — Koa-style onion middleware model
 
 import { createHash } from "node:crypto";
+import { validateUpstreamUrl } from "./lib/url-safety.ts";
 import { piiRedactor } from "./pii-redactor.ts";
 import { secretScanner } from "./secret-scanner.ts";
 import type {
@@ -43,6 +44,7 @@ export function createLlmProxy(options: LlmProxyOptions) {
     timeout = DEFAULT_TIMEOUT,
     maxSizeMb = DEFAULT_MAX_SIZE_MB,
     forwardHeaders = DEFAULT_FORWARD_HEADERS,
+    ssrfOptions,
   } = options;
 
   const pipeline: RequestMiddleware[] =
@@ -146,6 +148,22 @@ export function createLlmProxy(options: LlmProxyOptions) {
         for (const [k, v] of Object.entries(provider.extraHeaders)) {
           fetchHeaders[k] = v;
         }
+      }
+
+      // SSRF guard: validate the upstream URL immediately before fetching.
+      // This catches any runtime-mutated provider.baseUrl that was not
+      // validated at provider-factory time (e.g. set after construction).
+      try {
+        await validateUpstreamUrl(upstreamUrl, ssrfOptions);
+      } catch (err) {
+        logger.error("SSRF validation rejected upstream URL", err);
+        return {
+          status: 403,
+          headers: { "content-type": "application/json" },
+          body: Buffer.from(
+            JSON.stringify({ error: "Upstream URL rejected by SSRF policy" }),
+          ),
+        };
       }
 
       // Fetch upstream

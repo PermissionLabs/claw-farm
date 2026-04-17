@@ -13,6 +13,13 @@ const fakeProvider: LlmProvider = {
   extraHeaders: {},
 };
 
+// SSRF options that skip real DNS and allow the http:// test upstream.
+// In production, ssrfOptions is left unset (deny-by-default).
+const testSsrfOptions = {
+  allowPrivate: true,
+  resolveHost: async (_hostname: string): Promise<string[]> => [],
+};
+
 // Intercept fetch calls
 type FetchCall = { url: string; method: string; headers: Record<string, string> };
 let fetchCalls: FetchCall[] = [];
@@ -55,7 +62,7 @@ describe("createLlmProxy", () => {
   });
 
   it("proxies a valid request to the upstream URL", async () => {
-    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [] });
+    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [], ssrfOptions: testSsrfOptions });
 
     const response = await proxy({
       method: "POST",
@@ -71,7 +78,7 @@ describe("createLlmProxy", () => {
   });
 
   it("returns 403 for disallowed path prefix", async () => {
-    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [] });
+    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [], ssrfOptions: testSsrfOptions });
 
     const response = await proxy({
       method: "GET",
@@ -86,7 +93,7 @@ describe("createLlmProxy", () => {
   });
 
   it("returns 403 for path traversal", async () => {
-    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [] });
+    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [], ssrfOptions: testSsrfOptions });
 
     const response = await proxy({
       method: "GET",
@@ -101,7 +108,7 @@ describe("createLlmProxy", () => {
   });
 
   it("returns 413 when body exceeds maxSizeMb", async () => {
-    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [], maxSizeMb: 0.0001 });
+    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [], maxSizeMb: 0.0001, ssrfOptions: testSsrfOptions });
 
     const response = await proxy({
       method: "POST",
@@ -116,7 +123,7 @@ describe("createLlmProxy", () => {
   });
 
   it("strips x-forwarded-* headers before forwarding", async () => {
-    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [] });
+    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [], ssrfOptions: testSsrfOptions });
 
     await proxy({
       method: "POST",
@@ -138,7 +145,7 @@ describe("createLlmProxy", () => {
 
   it("strips sensitive response headers (server, set-cookie, x-powered-by)", async () => {
     // The mock sets "server" header on the response
-    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [] });
+    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [], ssrfOptions: testSsrfOptions });
 
     const response = await proxy({
       method: "POST",
@@ -153,7 +160,7 @@ describe("createLlmProxy", () => {
   });
 
   it("only forwards allowlisted query params", async () => {
-    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [] });
+    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [], ssrfOptions: testSsrfOptions });
 
     await proxy({
       method: "GET",
@@ -171,7 +178,7 @@ describe("createLlmProxy", () => {
   });
 
   it("injects auth header into upstream request", async () => {
-    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [] });
+    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [], ssrfOptions: testSsrfOptions });
 
     await proxy({
       method: "POST",
@@ -204,6 +211,7 @@ describe("createLlmProxy", () => {
     const { proxy } = createLlmProxy({
       provider: fakeProvider,
       pipeline: [mwA as never, mwB as never],
+      ssrfOptions: testSsrfOptions,
     });
 
     await proxy({

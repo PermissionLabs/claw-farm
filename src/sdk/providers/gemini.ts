@@ -1,4 +1,5 @@
 import type { LlmProvider } from "../types.ts";
+import { validateUpstreamUrl } from "../lib/url-safety.ts";
 
 export interface GeminiOptions {
   apiKey: string;
@@ -6,12 +7,14 @@ export interface GeminiOptions {
   disableThinking?: boolean;
 }
 
-export function gemini(opts: GeminiOptions): LlmProvider {
+export async function gemini(opts: GeminiOptions): Promise<LlmProvider> {
   const disableThinking = opts.disableThinking ?? false;
+  const rawBase = opts.baseUrl ?? "https://generativelanguage.googleapis.com";
+  await validateUpstreamUrl(rawBase);
 
   return {
     name: "gemini",
-    baseUrl: opts.baseUrl ?? "https://generativelanguage.googleapis.com",
+    baseUrl: rawBase,
     authHeader: "x-goog-api-key",
     authValue: opts.apiKey,
     pathPrefixes: ["v1beta/", "v1/", "v1alpha/", "v1beta1/"],
