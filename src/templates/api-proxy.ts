@@ -455,14 +455,14 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN useradd -r -s /bin/false appuser && mkdir /logs && chown appuser:appuser /logs
+RUN groupadd -g 10001 appuser && useradd -r -u 10001 -g 10001 -s /bin/false appuser && mkdir /logs && chown -R appuser:appuser /app /logs
 USER appuser
 
 COPY api_proxy.py .
 
 EXPOSE 8080
 
-CMD ["uvicorn", "api_proxy:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "api_proxy:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips=127.0.0.1"]
 `;
 }
 

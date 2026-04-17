@@ -33,6 +33,7 @@ services:
       - ./logs:/logs
     networks:
       - proxy-net
+    init: true
     read_only: true
     tmpfs:
       - /tmp:size=50M
@@ -88,6 +89,7 @@ services:
     networks:
       - frontend
       - backend
+    init: true
     read_only: true
     tmpfs:
       - /tmp:size=100M
