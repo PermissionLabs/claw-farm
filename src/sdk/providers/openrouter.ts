@@ -1,4 +1,5 @@
 import type { LlmProvider } from "../types.ts";
+import { validateUpstreamUrl } from "../lib/url-safety.ts";
 
 export interface OpenRouterOptions {
   apiKey: string;
@@ -6,10 +7,12 @@ export interface OpenRouterOptions {
   title?: string;
 }
 
-export function openRouter(opts: OpenRouterOptions): LlmProvider {
+export async function openRouter(opts: OpenRouterOptions): Promise<LlmProvider> {
+  const baseUrl = "https://openrouter.ai/api";
+  await validateUpstreamUrl(baseUrl);
   return {
     name: "openrouter",
-    baseUrl: "https://openrouter.ai/api",
+    baseUrl,
     authHeader: "authorization",
     authValue: `Bearer ${opts.apiKey}`,
     pathPrefixes: ["v1/"],

@@ -20,6 +20,7 @@ import {
 } from "./registry.ts";
 import { readProjectConfig, resolveRuntimeConfig } from "./config.ts";
 import { fileExists } from "./fs-utils.ts";
+import { writeSecret } from "./secret-file.ts";
 import { ensureInstanceDirs, instanceDir, templateDir } from "./instance.ts";
 import { fillUserTemplate } from "../templates/USER.template.md.ts";
 import { runCompose, COMPOSE_FILENAME } from "./compose.ts";
@@ -145,7 +146,7 @@ export async function spawn(options: {
     const envContent = env
       ? Object.entries(env).map(([k, v]) => validateEnvEntry(k, v)).join("\n") + "\n"
       : "";
-    await Bun.write(join(instDir, "instance.env"), envContent);
+    await writeSecret(join(instDir, "instance.env"), envContent);
 
     // Write compose (always regenerate)
     const composeContent = runtime.instanceComposeTemplate(projectName, userId, port, proxyMode);
