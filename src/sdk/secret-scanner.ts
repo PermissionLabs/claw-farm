@@ -30,6 +30,12 @@ export const defaultSecretPatterns: SecretPatternGroup[] = [
     name: "cloud",
     patterns: [
       { name: "AWS_ACCESS_KEY", regex: /AKIA[0-9A-Z]{16}/g, replacement: "[REDACTED_AWS_ACCESS_KEY]" },
+      { name: "AWS_TEMP_ACCESS_KEY", regex: /ASIA[0-9A-Z]{16}/g, replacement: "[REDACTED_AWS_TEMP_ACCESS_KEY]" },
+      {
+        name: "AWS_SESSION_TOKEN",
+        regex: /FwoGZ[A-Za-z0-9/+=_-]{200,}/g,
+        replacement: "[REDACTED_AWS_SESSION_TOKEN]",
+      },
       {
         name: "AWS_SECRET_KEY",
         regex: /(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY)[\s=:]+[A-Za-z0-9/+=]{40}/gi,

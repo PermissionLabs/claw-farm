@@ -40,6 +40,11 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
+try:
+    import certifi
+except ImportError:
+    raise RuntimeError("certifi is required for TLS verification — add certifi to requirements.txt")
+
 import httpx
 from fastapi import FastAPI, Request, Response
 
@@ -142,6 +147,8 @@ SECRET_PATTERNS = [
 
     # AWS
     (r"AKIA[0-9A-Z]{16}", "AWS_ACCESS_KEY"),
+    (r"ASIA[0-9A-Z]{16}", "AWS_TEMP_ACCESS_KEY"),
+    (r"FwoGZ[A-Za-z0-9/+=_-]{200,}", "AWS_SESSION_TOKEN"),
     (r"(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY)[\\s=:]+[A-Za-z0-9/+=]{40}", "AWS_SECRET_KEY"),
 
     # Stripe
@@ -382,7 +389,7 @@ async def proxy(request: Request, path: str):
 
     start = time.monotonic()
 
-    async with httpx.AsyncClient(timeout=120.0, follow_redirects=False) as client:
+    async with httpx.AsyncClient(verify=True, trust_env=False, timeout=120.0, follow_redirects=False) as client:
         upstream_resp = await client.request(
             method=request.method,
             url=upstream_url,
@@ -457,6 +464,7 @@ export function apiProxyRequirementsTemplate(): string {
   return `fastapi==0.115.12
 uvicorn[standard]==0.34.2
 httpx==0.28.1
+certifi>=2024.2.2
 `;
 }
 
