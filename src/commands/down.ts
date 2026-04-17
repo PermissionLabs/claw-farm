@@ -43,6 +43,7 @@ export async function downCommand(args: string[]): Promise<void> {
     }
     for (const name of names) {
       const project = reg.projects[name];
+      if (!project) continue;
       const config = await readProjectConfig(project.path);
       const { runtimeType, proxyMode } = resolveRuntimeConfig(config, project);
 

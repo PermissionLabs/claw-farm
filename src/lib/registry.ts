@@ -18,10 +18,12 @@ const FLAGS_WITH_VALUES = new Set(["--processor", "--llm", "--user", "--context"
 export function findPositionalArg(args: string[], exclude?: string[]): string | undefined {
   const excludeSet = exclude ? new Set(exclude) : undefined;
   for (let i = 0; i < args.length; i++) {
-    if (FLAGS_WITH_VALUES.has(args[i])) { i++; continue; }
-    if (args[i].startsWith("-")) continue;
-    if (excludeSet?.has(args[i])) continue;
-    return args[i];
+    const arg = args[i];
+    if (arg === undefined) continue;
+    if (FLAGS_WITH_VALUES.has(arg)) { i++; continue; }
+    if (arg.startsWith("-")) continue;
+    if (excludeSet?.has(arg)) continue;
+    return arg;
   }
   return undefined;
 }
