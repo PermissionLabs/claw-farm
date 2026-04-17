@@ -7,6 +7,7 @@
 
 import { join } from "node:path";
 import { mkdir, readdir, cp, rm } from "node:fs/promises";
+import { isNotFoundError } from "./errors.ts";
 import {
   resolveProjectName,
   addInstance,
@@ -31,12 +32,30 @@ export { getInstance, getProject };
 
 const ENV_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+// Characters that are forbidden in .env file values (BKLG-012)
+const FORBIDDEN_VALUE_CHARS: Array<{ char: string; display: string }> = [
+  { char: '"', display: '"' },
+  { char: "'", display: "'" },
+  { char: "`", display: "`" },
+  { char: "\\", display: "\\" },
+  { char: "\0", display: "\\0 (null byte)" },
+  { char: "$(", display: "$(" },
+  { char: "$`", display: "$`" },
+];
+
 function validateEnvEntry(key: string, value: string): string {
   if (!ENV_KEY_REGEX.test(key)) {
     throw new Error(`Invalid env var key: "${key}"`);
   }
   if (value.includes("\n") || value.includes("\r")) {
     throw new Error(`Env var "${key}" contains newline characters`);
+  }
+  for (const { char, display } of FORBIDDEN_VALUE_CHARS) {
+    if (value.includes(char)) {
+      throw new Error(
+        `Env var "${key}" contains forbidden character '${display}' (values cannot contain quotes, backslashes, null bytes, or command substitution sequences)`,
+      );
+    }
   }
   return `${key}=${value}`;
 }
@@ -127,7 +146,8 @@ export async function spawn(options: {
       try {
         const template = await Bun.file(join(tmplDir, "USER.template.md")).text();
         userContent = fillUserTemplate(template, userId, context);
-      } catch {
+      } catch (err) {
+        if (!isNotFoundError(err)) throw err;
         userContent = `# ${projectName} — User Profile\n\n- User ID: ${userId}\n`;
         if (context && Object.keys(context).length > 0) {
           userContent += "\n## Details\n";
