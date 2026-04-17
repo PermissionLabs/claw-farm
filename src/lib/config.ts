@@ -1,9 +1,9 @@
 import { join } from "node:path";
-import { chmod } from "node:fs/promises";
 
 import type { RuntimeType, ProxyMode, AgentRuntime } from "../runtimes/interface.ts";
 import { getRuntime } from "../runtimes/index.ts";
 import type { ProjectEntry } from "./registry.ts";
+import { writeSecret } from "./secret-file.ts";
 
 export type LlmProvider = "gemini" | "anthropic" | "openai-compat";
 
@@ -77,8 +77,7 @@ export async function writeProjectConfig(
   config: ClawFarmConfig,
 ): Promise<void> {
   const configPath = join(projectDir, ".claw-farm.json");
-  await Bun.write(configPath, JSON.stringify(config, null, 2) + "\n");
-  await chmod(configPath, 0o600);
+  await writeSecret(configPath, JSON.stringify(config, null, 2) + "\n");
 }
 
 export async function readProjectConfig(

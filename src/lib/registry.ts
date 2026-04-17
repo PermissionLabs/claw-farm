@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { mkdir, writeFile, readFile, stat, unlink, copyFile, chmod } from "node:fs/promises";
+import { mkdir, writeFile, readFile, stat, unlink, copyFile } from "node:fs/promises";
+import { writeSecret } from "./secret-file.ts";
 
 import type { RuntimeType } from "../runtimes/interface.ts";
 
@@ -184,8 +185,7 @@ export async function loadRegistry(): Promise<Registry> {
 
 export async function saveRegistry(reg: Registry): Promise<void> {
   await mkdir(REGISTRY_DIR, { recursive: true, mode: 0o700 });
-  await Bun.write(REGISTRY_PATH, JSON.stringify(reg, null, 2) + "\n");
-  await chmod(REGISTRY_PATH, 0o600);
+  await writeSecret(REGISTRY_PATH, JSON.stringify(reg, null, 2) + "\n");
 }
 
 function allocatePort(reg: Registry): number {
