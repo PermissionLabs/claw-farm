@@ -101,7 +101,8 @@ export function createLlmProxy(options: LlmProxyOptions) {
           const data = JSON.parse(body.toString("utf-8")) as Record<string, unknown>;
           const transformed = provider.transformRequest(data);
           body = Buffer.from(JSON.stringify(transformed), "utf-8");
-        } catch {
+        } catch (err) {
+          if (!(err instanceof SyntaxError)) throw err;
           // Non-JSON body, skip transform
         }
       }
@@ -185,7 +186,8 @@ export function createLlmProxy(options: LlmProxyOptions) {
           const data = JSON.parse(responseBody.toString("utf-8")) as Record<string, unknown>;
           const transformed = provider.transformResponse(data);
           responseBody = Buffer.from(JSON.stringify(transformed), "utf-8");
-        } catch {
+        } catch (err) {
+          if (!(err instanceof SyntaxError)) throw err;
           // Non-JSON response, skip transform
         }
       }
