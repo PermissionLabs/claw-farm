@@ -42,9 +42,10 @@ export async function upCommand(args: string[]): Promise<void> {
       return;
     }
     for (const name of names) {
-      const project = reg.projects[name];
+      // name comes from Object.keys(reg.projects) so project is always defined
+      const project = reg.projects[name]!;
       const config = await readProjectConfig(project.path);
-      const { runtimeType, runtime, proxyMode } = resolveRuntimeConfig(config, project);
+      const { runtimeType, proxyMode } = resolveRuntimeConfig(config, project);
 
       if (project.multiInstance) {
         await ensureSharedProxy(project.path, name, runtimeType, proxyMode);
@@ -71,7 +72,7 @@ export async function upCommand(args: string[]): Promise<void> {
   const name = findPositionalArg(args);
   const { name: projectName, entry } = await resolveProjectName(name);
   const config = await readProjectConfig(entry.path);
-  const { runtimeType, runtime, proxyMode } = resolveRuntimeConfig(config, entry);
+  const { runtimeType, proxyMode } = resolveRuntimeConfig(config, entry);
 
   if (entry.multiInstance && userId) {
     // Start specific instance

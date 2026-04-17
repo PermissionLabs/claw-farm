@@ -1,4 +1,4 @@
-import { access, readdir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 
 /** Returns true if a file exists at the given path. */
 export async function fileExists(path: string): Promise<boolean> {
