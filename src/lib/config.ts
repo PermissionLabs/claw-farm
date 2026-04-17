@@ -5,6 +5,10 @@ import { getRuntime } from "../runtimes/index.ts";
 import type { ProjectEntry } from "./registry.ts";
 import { writeSecret } from "./secret-file.ts";
 
+// Re-export deepMerge from its canonical location.
+// picoclaw.ts imports deepMerge from this module — keep the re-export for compat.
+export { deepMerge } from "./deep-merge.ts";
+
 export type LlmProvider = "gemini" | "anthropic" | "openai-compat";
 
 export interface ClawFarmConfig {
@@ -92,41 +96,17 @@ export async function readProjectConfig(
 }
 
 /**
- * Deep merge two objects. `override` values take priority over `base`.
- * Arrays are replaced, not concatenated.
- */
-export function deepMerge(
-  base: Record<string, unknown>,
-  override: Record<string, unknown>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = { ...base };
-  for (const key of Object.keys(override)) {
-    const baseVal = base[key];
-    const overVal = override[key];
-    if (
-      overVal !== null &&
-      typeof overVal === "object" &&
-      !Array.isArray(overVal) &&
-      baseVal !== null &&
-      typeof baseVal === "object" &&
-      !Array.isArray(baseVal)
-    ) {
-      result[key] = deepMerge(
-        baseVal as Record<string, unknown>,
-        overVal as Record<string, unknown>,
-      );
-    } else {
-      result[key] = overVal;
-    }
-  }
-  return result;
-}
-
-/**
  * Strip JS-style comments from a JSON-like string so JSON.parse can handle it.
- * Handles // line comments and /* block comments *\/ outside of strings.
+ *
+ * Supported syntax subset:
+ *   - `//` line comments (stripped to end of line)
+ *   - `/* ... *\/` block comments (stripped, may span lines)
+ *   - String literals are passed through unchanged (including `"// inside string"`)
+ *   - Escape sequences inside strings (`\"`, `\\`) are handled correctly
+ *
+ * Not supported: regex literals, template strings, nested block comments.
  */
-function stripJsonComments(text: string): string {
+export function stripJsonComments(text: string): string {
   let result = "";
   let i = 0;
   while (i < text.length) {
@@ -163,66 +143,3 @@ function stripJsonComments(text: string): string {
   return result;
 }
 
-/**
- * Merge claw-farm template config with existing user config.
- * Template provides the base, user's existing config overrides on top.
- * This preserves user-specific settings (gateway.auth, controlUi, etc.)
- * while updating claw-farm managed fields (agents, models, env).
- */
-export function mergeOpenclawConfig(
-  templateJson: string,
-  existingJson: string,
-): string {
-  try {
-    const template = JSON.parse(stripJsonComments(templateJson)) as Record<string, unknown>;
-    const existing = JSON.parse(stripJsonComments(existingJson)) as Record<string, unknown>;
-    // Base merge: template as base, existing overrides (preserves user keys)
-    const merged = deepMerge(template, existing);
-    // Re-apply template fields that claw-farm must control
-    // (user should not accidentally keep stale model/provider config)
-    merged.agents = deepMerge(
-      (existing.agents ?? {}) as Record<string, unknown>,
-      (template.agents ?? {}) as Record<string, unknown>,
-    );
-    merged.models = deepMerge(
-      (existing.models ?? {}) as Record<string, unknown>,
-      (template.models ?? {}) as Record<string, unknown>,
-    );
-    // Merge env: template as base, user additions preserved,
-    // but force-apply API key sentinels from template (security: must route through proxy)
-    const mergedEnv = deepMerge(
-      (template.env ?? {}) as Record<string, unknown>,
-      (existing.env ?? {}) as Record<string, unknown>,
-    );
-    const templateEnv = (template.env ?? {}) as Record<string, unknown>;
-    for (const key of Object.keys(templateEnv)) {
-      if (key.endsWith("_API_KEY")) {
-        mergedEnv[key] = templateEnv[key]; // force "proxied" sentinel
-      }
-    }
-    merged.env = mergedEnv;
-    // Ensure every provider has a models array (OpenClaw requires it)
-    const providers = (merged.models as Record<string, unknown>)?.providers as Record<string, Record<string, unknown>> | undefined;
-    if (providers) {
-      for (const key of Object.keys(providers)) {
-        if (providers[key] && !Array.isArray(providers[key].models)) {
-          providers[key].models = [];
-        }
-      }
-    }
-    // Ensure controlUi.enabled from template is applied, but preserve user's
-    // other controlUi settings (allowedOrigins, dangerouslyDisableDeviceAuth, etc.)
-    const mergedGateway = (merged.gateway ?? {}) as Record<string, unknown>;
-    const templateControlUi = ((template.gateway ?? {}) as Record<string, unknown>).controlUi as Record<string, unknown> | undefined;
-    if (templateControlUi) {
-      const userControlUi = (mergedGateway.controlUi ?? {}) as Record<string, unknown>;
-      mergedGateway.controlUi = { ...userControlUi, enabled: templateControlUi.enabled };
-    }
-    // Remove root-level controlUi if present (OpenClaw reads gateway.controlUi)
-    delete merged.controlUi;
-    return JSON.stringify(merged, null, 2) + "\n";
-  } catch {
-    // If existing config is unparseable, just use template
-    return templateJson;
-  }
-}
