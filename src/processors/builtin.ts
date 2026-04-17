@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { mkdir, rm, readdir } from "node:fs/promises";
 import type { MemoryProcessor } from "./interface.ts";
+import { getRuntimePaths } from "../runtimes/paths.ts";
 
 /**
  * Builtin processor: uses OpenClaw's native MEMORY.md markdown format.
@@ -33,9 +34,9 @@ export const builtinProcessor: MemoryProcessor = {
       const memoryContent = await Bun.file(
         join(snapshotsDir, latest, "MEMORY.md"),
       ).text();
-      const memoryPath = runtimeType === "picoclaw"
-        ? join(projectDir, "picoclaw", "workspace", "memory", "MEMORY.md")
-        : join(projectDir, "openclaw", "workspace", "MEMORY.md");
+      const paths = getRuntimePaths(runtimeType);
+      const wsDir = paths.workspace(projectDir);
+      const memoryPath = paths.memory(wsDir);
       await Bun.write(memoryPath, memoryContent);
       console.log(`  Rebuilt MEMORY.md from snapshot: ${latest}`);
     } catch {

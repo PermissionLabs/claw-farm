@@ -6,6 +6,7 @@ import { instanceDir } from "../lib/instance.ts";
 import { builtinProcessor } from "../processors/builtin.ts";
 import { mem0Processor } from "../processors/mem0.ts";
 import type { RuntimeType } from "../runtimes/interface.ts";
+import { getRuntimePaths } from "../runtimes/paths.ts";
 
 export async function memoryRebuildCommand(args: string[]): Promise<void> {
   const userIdx = args.indexOf("--user");
@@ -57,15 +58,12 @@ async function rebuildInstanceMemory(
   runtimeType: RuntimeType = "openclaw",
 ): Promise<void> {
   const instDir = instanceDir(projectDir, userId);
-  const rtDir = runtimeType === "picoclaw" ? "picoclaw" : "openclaw";
+  const paths = getRuntimePaths(runtimeType);
 
   // Determine session and memory paths based on runtime
-  const sessionsDir = runtimeType === "picoclaw"
-    ? join(instDir, rtDir, "workspace", "sessions")
-    : join(instDir, rtDir, "sessions");
-  const memoryPath = runtimeType === "picoclaw"
-    ? join(instDir, rtDir, "workspace", "memory", "MEMORY.md")
-    : join(instDir, rtDir, "workspace", "MEMORY.md");
+  const sessionsDir = paths.sessions(instDir);
+  const wsDir = paths.workspace(instDir);
+  const memoryPath = paths.memory(wsDir);
 
   if (processor === "mem0") {
     // Re-index sessions from instance into Qdrant

@@ -5,6 +5,7 @@ import { readProjectConfig, writeProjectConfig } from "./config.ts";
 import { ensureTemplateDirs, templateDir } from "./instance.ts";
 import { userTemplateContent } from "../templates/USER.template.md.ts";
 import { fileExists, copyIfExists } from "./fs-utils.ts";
+import { getRuntimePaths } from "../runtimes/paths.ts";
 
 /**
  * Migrate a single-instance project to multi-instance mode.
@@ -23,7 +24,9 @@ export async function migrateToMulti(
   if (config?.multiInstance) return;
 
   const runtimeDirName = config?.runtime === "picoclaw" ? "picoclaw" : "openclaw";
-  const wsDir = join(projectDir, runtimeDirName, "workspace");
+  const runtimeType = config?.runtime === "picoclaw" ? "picoclaw" as const : "openclaw" as const;
+  const runtimePaths = getRuntimePaths(runtimeType);
+  const wsDir = runtimePaths.workspace(projectDir);
   const tmplDir = templateDir(projectDir);
 
   // Step 1: Create template/ from existing shared files
@@ -99,9 +102,8 @@ export async function migrateToMulti(
   }
 
   // Move MEMORY.md to default instance
-  const memoryDest = runtimeDirName === "picoclaw"
-    ? join(defaultInstDir, runtimeDirName, "workspace", "memory", "MEMORY.md")
-    : join(defaultInstDir, runtimeDirName, "workspace", "MEMORY.md");
+  const defaultInstWsDir = runtimePaths.workspace(defaultInstDir);
+  const memoryDest = runtimePaths.memory(defaultInstWsDir);
   await copyIfExists(join(wsDir, "MEMORY.md"), memoryDest);
   // picoclaw stores memory under workspace/memory/
   if (runtimeDirName === "picoclaw") {
@@ -118,11 +120,9 @@ export async function migrateToMulti(
 
   // Copy raw session logs (check runtime-specific locations)
   const sessionsSrc = runtimeDirName === "picoclaw"
-    ? [join(projectDir, runtimeDirName, "workspace", "sessions")]
+    ? [runtimePaths.sessions(projectDir)]
     : [join(projectDir, "openclaw", "sessions"), join(projectDir, "openclaw", "raw", "sessions")];
-  const sessionsDest = runtimeDirName === "picoclaw"
-    ? join(defaultInstDir, runtimeDirName, "workspace", "sessions")
-    : join(defaultInstDir, "openclaw", "sessions");
+  const sessionsDest = runtimePaths.sessions(defaultInstDir);
   for (const sessionsDir of sessionsSrc) {
     try {
       const files = await readdir(sessionsDir);
