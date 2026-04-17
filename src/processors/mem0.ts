@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { mkdir, readdir } from "node:fs/promises";
 import type { MemoryProcessor } from "./interface.ts";
+import { getRuntimePaths } from "../runtimes/paths.ts";
 
 /**
  * Mem0+Qdrant processor: uses Mem0 for semantic memory with vector search.
@@ -199,9 +200,7 @@ MEM0_API_KEY=
       "  Note: Ensure Qdrant and Mem0 containers are running (claw-farm up)",
     );
 
-    const sessionsDir = runtimeType === "picoclaw"
-      ? join(projectDir, "picoclaw", "workspace", "sessions")
-      : join(projectDir, "openclaw", "sessions");
+    const sessionsDir = getRuntimePaths(runtimeType).sessions(projectDir);
 
     try {
       const files = await readdir(sessionsDir);

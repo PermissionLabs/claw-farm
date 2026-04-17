@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import type { RuntimeType } from "../runtimes/interface.ts";
+import { getRuntimePaths } from "../runtimes/paths.ts";
 
 /**
  * Layer 0: Raw data collection — immutable, append-only.
@@ -12,14 +13,15 @@ export async function ensureRawDirs(
   runtimeType?: RuntimeType,
 ): Promise<void> {
   const rt = runtimeType ?? "openclaw";
-  if (rt === "picoclaw") {
-    // picoclaw stores sessions under workspace/
-    await mkdir(join(projectDir, "picoclaw", "workspace", "sessions"), { recursive: true });
-  } else {
-    await mkdir(join(projectDir, "openclaw", "sessions"), { recursive: true });
-    await mkdir(join(projectDir, "openclaw", "logs"), { recursive: true });
+  const paths = getRuntimePaths(rt);
+  const mkdirs: Promise<string | undefined>[] = [
+    mkdir(paths.sessions(projectDir), { recursive: true }),
+    mkdir(join(projectDir, "raw", "workspace-snapshots"), { recursive: true }),
+  ];
+  if (rt === "openclaw") {
+    mkdirs.push(mkdir(join(projectDir, "openclaw", "logs"), { recursive: true }));
   }
-  await mkdir(join(projectDir, "raw", "workspace-snapshots"), { recursive: true });
+  await Promise.all(mkdirs);
 }
 
 export async function snapshotWorkspace(
@@ -27,9 +29,8 @@ export async function snapshotWorkspace(
   runtimeType?: RuntimeType,
 ): Promise<string> {
   const rt = runtimeType ?? "openclaw";
-  const wsDir = rt === "picoclaw"
-    ? join(projectDir, "picoclaw", "workspace")
-    : join(projectDir, "openclaw", "workspace");
+  const paths = getRuntimePaths(rt);
+  const wsDir = paths.workspace(projectDir);
   const snapDir = join(projectDir, "raw", "workspace-snapshots");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const snapPath = join(snapDir, timestamp);
@@ -37,7 +38,7 @@ export async function snapshotWorkspace(
   await mkdir(snapPath, { recursive: true });
 
   // Snapshot MEMORY.md and SOUL.md
-  const memoryFile = rt === "picoclaw" ? join(wsDir, "memory", "MEMORY.md") : join(wsDir, "MEMORY.md");
+  const memoryFile = paths.memory(wsDir);
   for (const { src, dest } of [
     { src: memoryFile, dest: "MEMORY.md" },
     { src: join(wsDir, "SOUL.md"), dest: "SOUL.md" },

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { mkdir, readdir, cp, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { resolveProjectName, findPositionalArg, type ProjectEntry } from "../lib/registry.ts";
 import { copyTemplateFiles } from "../lib/api.ts";
 import { readProjectConfig, resolveRuntimeConfig, envExampleTemplate } from "../lib/config.ts";
@@ -9,34 +9,8 @@ import { mem0ComposeTemplate } from "../templates/docker-compose.mem0.yml.ts";
 import { policyTemplate } from "../templates/policy.yaml.ts";
 import { writeApiProxyFiles } from "../templates/api-proxy.ts";
 import { getRuntime, type RuntimeType, type ProxyMode } from "../runtimes/index.ts";
-import { fileExists } from "../lib/fs-utils.ts";
+import { fileExists, moveFile, moveDirContents, rmIfEmpty } from "../lib/fs-utils.ts";
 import { COMPOSE_FILENAME } from "../lib/compose.ts";
-
-async function moveContents(srcDir: string, destDir: string): Promise<void> {
-  let files: string[];
-  try {
-    files = await readdir(srcDir);
-  } catch {
-    return; // Source doesn't exist
-  }
-  if (files.length === 0) return;
-  await mkdir(destDir, { recursive: true });
-  for (const file of files) {
-    await cp(join(srcDir, file), join(destDir, file), { recursive: true });
-  }
-  // Remove originals after successful copy
-  for (const file of files) {
-    await rm(join(srcDir, file), { recursive: true, force: true });
-  }
-}
-
-async function moveFile(src: string, dest: string): Promise<void> {
-  const file = Bun.file(src);
-  if (!await file.exists()) return;
-  const content = await file.arrayBuffer();
-  await Bun.write(dest, content);
-  await rm(src, { force: true });
-}
 
 /** Copy file without deleting source. */
 async function copyFile(src: string, dest: string): Promise<void> {
@@ -44,15 +18,6 @@ async function copyFile(src: string, dest: string): Promise<void> {
   if (!await file.exists()) return;
   const content = await file.arrayBuffer();
   await Bun.write(dest, content);
-}
-
-async function rmIfEmpty(dir: string): Promise<void> {
-  try {
-    const files = await readdir(dir);
-    if (files.length === 0) await rm(dir, { recursive: true });
-  } catch {
-    // Dir doesn't exist
-  }
 }
 
 /**
@@ -85,13 +50,13 @@ async function migrateSingleInstanceLayout(projectDir: string): Promise<boolean>
   await rmIfEmpty(oldConfigDir);
 
   // 2. Move sessions: openclaw/raw/sessions/ → openclaw/sessions/
-  await moveContents(
+  await moveDirContents(
     join(projectDir, "openclaw", "raw", "sessions"),
     join(projectDir, "openclaw", "sessions"),
   );
 
   // 3. Move workspace-snapshots: openclaw/raw/workspace-snapshots/ → raw/workspace-snapshots/
-  await moveContents(
+  await moveDirContents(
     join(projectDir, "openclaw", "raw", "workspace-snapshots"),
     join(projectDir, "raw", "workspace-snapshots"),
   );
@@ -102,7 +67,7 @@ async function migrateSingleInstanceLayout(projectDir: string): Promise<boolean>
   await rmIfEmpty(join(projectDir, "openclaw", "raw"));
 
   // 4. Move processed: openclaw/processed/ → processed/
-  await moveContents(
+  await moveDirContents(
     join(projectDir, "openclaw", "processed"),
     join(projectDir, "processed"),
   );
@@ -139,15 +104,15 @@ async function migrateInstanceLayout(
   await moveFile(join(instDir, "MEMORY.md"), join(instDir, "openclaw", "workspace", "MEMORY.md"));
 
   // Move memory/ → openclaw/workspace/memory/
-  await moveContents(join(instDir, "memory"), join(instDir, "openclaw", "workspace", "memory"));
+  await moveDirContents(join(instDir, "memory"), join(instDir, "openclaw", "workspace", "memory"));
   await rmIfEmpty(join(instDir, "memory"));
 
   // Move raw/sessions/ → openclaw/sessions/
-  await moveContents(join(instDir, "raw", "sessions"), join(instDir, "openclaw", "sessions"));
+  await moveDirContents(join(instDir, "raw", "sessions"), join(instDir, "openclaw", "sessions"));
   await rmIfEmpty(join(instDir, "raw", "sessions"));
 
   // Move logs/ → openclaw/logs/
-  await moveContents(join(instDir, "logs"), join(instDir, "openclaw", "logs"));
+  await moveDirContents(join(instDir, "logs"), join(instDir, "openclaw", "logs"));
 
   // Clean up old directories
   await rmIfEmpty(join(instDir, "raw"));
