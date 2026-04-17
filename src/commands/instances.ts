@@ -43,7 +43,7 @@ export async function instancesCommand(args: string[]): Promise<void> {
   for (const { inst, status } of rows) {
     const statusIcon = status === "running" ? "🟢" : status === "stopped" ? "⚪" : "❓";
 
-    const userCol = inst.userId.padEnd(16).slice(0, 16);
+    const userCol = inst.userId.length > 16 ? inst.userId.slice(0, 13) + "..." : inst.userId.padEnd(16);
     const portCol = String(inst.port).padEnd(7);
     const statusCol = `${statusIcon} ${status}`.padEnd(9);
     const dateCol = inst.createdAt.slice(0, 19).padEnd(20);

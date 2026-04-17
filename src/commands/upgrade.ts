@@ -6,7 +6,6 @@ import { readProjectConfig, resolveRuntimeConfig, envExampleTemplate } from "../
 import { ensureRawDirs } from "../lib/raw-collector.ts";
 import { ensureTemplateDirs, ensureInstanceDirs, templateDir, instanceDir } from "../lib/instance.ts";
 import { mem0ComposeTemplate } from "../templates/docker-compose.mem0.yml.ts";
-import { instanceComposeTemplate } from "../templates/docker-compose.instance.yml.ts";
 import { policyTemplate } from "../templates/policy.yaml.ts";
 import { writeApiProxyFiles } from "../templates/api-proxy.ts";
 import { getRuntime, type RuntimeType, type ProxyMode } from "../runtimes/index.ts";
@@ -331,8 +330,8 @@ async function upgradeMultiInstance(
   if (instanceIds.length > 0) {
     let migratedCount = 0;
     for (const userId of instanceIds) {
-      const inst = instances[userId];
-      if (!inst) continue;
+      // userId comes from Object.keys(instances) so inst is always defined
+      const inst = instances[userId]!;
       const instDir = instanceDir(projectDir, userId);
 
       // Migrate old layout → new layout if needed (OpenClaw only)
@@ -368,12 +367,7 @@ async function upgradeMultiInstance(
       await copyTemplateFiles(tmplDir, join(instDir, rtDir, "workspace"));
 
       // Regenerate compose
-      let composeContent: string;
-      if (runtimeType === "openclaw") {
-        composeContent = instanceComposeTemplate(projectName, userId, inst.port, proxyMode);
-      } else {
-        composeContent = runtime.instanceComposeTemplate(projectName, userId, inst.port, proxyMode);
-      }
+      const composeContent = runtime.instanceComposeTemplate(projectName, userId, inst.port, proxyMode);
       await Bun.write(join(instDir, COMPOSE_FILENAME), composeContent);
     }
     console.log(`✓ Updated ${instanceIds.length} instance(s) (compose + template files + directories)`);

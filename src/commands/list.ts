@@ -1,4 +1,4 @@
-import { loadRegistry, type ProjectEntry } from "../lib/registry.ts";
+import { loadRegistry } from "../lib/registry.ts";
 import { getComposeStatus } from "../lib/compose.ts";
 
 export async function listCommand(): Promise<void> {
@@ -16,18 +16,19 @@ export async function listCommand(): Promise<void> {
   console.log("│ Name         │ Runtime  │ Port    │ Status    │ Instances  │ Path                           │");
   console.log("├──────────────┼──────────┼─────────┼───────────┼────────────┼────────────────────────────────┤");
 
-  const rowsRaw = await Promise.all(names.map(async (name) => {
+  const rows = await Promise.all(names.map(async (name) => {
     const entry = reg.projects[name];
-    if (!entry) return null;
+    if (!entry) return null; // noUncheckedIndexedAccess guard — names comes from Object.keys so entry always exists
     const status = await getComposeStatus(entry.path);
     return { name, entry, status };
   }));
-  const rows = rowsRaw.filter((r) => r !== null) as Array<{ name: string; entry: ProjectEntry; status: "running" | "stopped" | "unknown" }>;
 
-  for (const { name, entry, status } of rows) {
+  for (const row of rows) {
+    if (!row) continue;
+    const { name, entry, status } = row;
     const statusIcon = status === "running" ? "🟢" : status === "stopped" ? "⚪" : "❓";
 
-    const nameCol = name.padEnd(12).slice(0, 12);
+    const nameCol = name.length > 12 ? name.slice(0, 9) + "..." : name.padEnd(12);
     const runtimeCol = (entry.runtime ?? "openclaw").padEnd(8).slice(0, 8);
     const portCol = String(entry.port).padEnd(7);
     const statusCol = `${statusIcon} ${status}`.padEnd(9);
