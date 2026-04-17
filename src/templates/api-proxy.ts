@@ -35,11 +35,14 @@ OpenClaw → http://api-proxy:8080/... → (redact + key inject) → LLM API
 """
 
 import hashlib
+import ipaddress
 import json
 import logging
 import os
 import re
+import socket
 import time
+import unicodedata
 from datetime import datetime, timezone
 from urllib.parse import urlparse, urlencode
 
@@ -108,6 +111,53 @@ PROVIDER_CONFIG = {
 ACTIVE_PROVIDER = PROVIDER_CONFIG.get(LLM_PROVIDER, PROVIDER_CONFIG["gemini"])
 UPSTREAM_BASE = ACTIVE_PROVIDER["base_url"]
 
+# --- SSRF startup check ---
+# Reject private/link-local/loopback upstream URLs unless ALLOW_PRIVATE_BASE_URL=1.
+# This blocks IMDS theft (169.254.169.254), internal network scanning, etc.
+_SSRF_ALLOW_PRIVATE = os.environ.get("ALLOW_PRIVATE_BASE_URL", "").strip() == "1"
+_FORBIDDEN_HOSTNAMES = {"metadata.google.internal", "metadata.goog", "metadata"}
+
+def _check_upstream_ssrf(base_url: str) -> None:
+    """Raise RuntimeError if base_url resolves to a private/reserved address."""
+    if _SSRF_ALLOW_PRIVATE:
+        return
+    try:
+        parsed = urlparse(base_url)
+        hostname = parsed.hostname or ""
+    except Exception as exc:
+        raise RuntimeError(f"SSRF check: cannot parse UPSTREAM_BASE {base_url!r}: {exc}") from exc
+
+    if not hostname:
+        raise RuntimeError(f"SSRF check: UPSTREAM_BASE {base_url!r} has no hostname")
+
+    # Reject known metadata hostnames by name
+    if hostname.lower() in _FORBIDDEN_HOSTNAMES:
+        raise RuntimeError(
+            f"SSRF check: UPSTREAM_BASE hostname {hostname!r} is a forbidden metadata endpoint. "
+            "Set ALLOW_PRIVATE_BASE_URL=1 to override (local dev only)."
+        )
+
+    # Resolve hostname → IP and check address category
+    try:
+        resolved_ip = socket.gethostbyname(hostname)
+    except socket.gaierror:
+        # DNS failure at startup is allowed (DNS may not be ready); check is best-effort.
+        logger.warning(f"SSRF check: could not resolve {hostname!r} at startup — skipping IP check")
+        return
+
+    try:
+        addr = ipaddress.ip_address(resolved_ip)
+    except ValueError:
+        return  # Not a valid IP string, skip
+
+    if addr.is_private or addr.is_link_local or addr.is_loopback or addr.is_reserved or addr.is_unspecified:
+        raise RuntimeError(
+            f"SSRF check: UPSTREAM_BASE {base_url!r} resolves to private/reserved address {resolved_ip}. "
+            "Set ALLOW_PRIVATE_BASE_URL=1 to override (local dev only)."
+        )
+
+_check_upstream_ssrf(UPSTREAM_BASE)
+
 logger.info(f"Provider: {LLM_PROVIDER} | Upstream: {UPSTREAM_BASE}")
 
 AUDIT_LOG_PATH = os.environ.get("AUDIT_LOG_PATH", "/logs/api-proxy-audit.jsonl")
@@ -146,28 +196,67 @@ ${secretPatternLines}
 COMPILED_SECRETS = [(pattern, label) for pattern, label in SECRET_PATTERNS]
 
 
+_ZERO_WIDTH_RE = re.compile(r"[\\u200B\\u200C\\u200D\\uFEFF\\u202E]")
+
+
+def normalize_for_scan(text: str) -> str:
+    """NFKC-normalize text and strip zero-width/RTL-override chars for pattern matching.
+
+    Maps fullwidth digits (０-９→0-9), Arabic-Indic digits, fullwidth hyphens, etc.
+    to their ASCII equivalents, and removes invisible evasion characters.
+    The normalized form is used for scanning only; see callers for replacement strategy.
+    """
+    normalized = unicodedata.normalize("NFKC", text)
+    return _ZERO_WIDTH_RE.sub("", normalized)
+
+
 def redact_pii(text: str) -> tuple[str, list[dict]]:
-    """Scan text for PII and replace with [REDACTED_TYPE]. Returns (redacted_text, findings)."""
+    """Scan text for PII and replace with [REDACTED_TYPE]. Returns (redacted_text, findings).
+
+    Runs each pattern twice: first on the working string (ASCII input), then on
+    the NFKC-normalized form to catch fullwidth digits, Arabic-Indic digits, and
+    zero-width evasion characters.
+    """
     findings = []
-    redacted = text
+    working = text
     for pattern, label in COMPILED_PII:
-        matches = pattern.findall(redacted)
-        if matches:
-            findings.append({"type": label, "count": len(matches)})
-            redacted = pattern.sub(f"[REDACTED_{label}]", redacted)
-    return redacted, findings
+        count = len(pattern.findall(working))
+        if count:
+            findings.append({"type": label, "count": count})
+            working = pattern.sub(f"[REDACTED_{label}]", working)
+        # Second pass on normalized form to catch Unicode evasion
+        norm = normalize_for_scan(working)
+        if norm != working:
+            norm_count = len(pattern.findall(norm))
+            if norm_count:
+                findings.append({"type": label, "count": norm_count})
+                working = pattern.sub(f"[REDACTED_{label}]", norm)
+    return working, findings
 
 
 def scan_secrets(text: str) -> tuple[str, list[dict]]:
-    """Scan text for secrets and replace with [REDACTED_SECRET]. Returns (cleaned_text, findings)."""
+    """Scan text for secrets and replace with [REDACTED_<label>]. Returns (cleaned_text, findings).
+
+    Runs each pattern twice: first on the working string, then on the NFKC-normalized
+    form to catch fullwidth/Arabic-Indic digit evasion and zero-width chars.
+    """
     findings = []
-    cleaned = text
+    working = text
     for pattern, label in COMPILED_SECRETS:
-        matches = pattern.findall(cleaned)
+        matches = pattern.findall(working)
         if matches:
-            findings.append({"type": label, "count": len(matches) if isinstance(matches[0], str) else len(matches)})
-            cleaned = pattern.sub(f"[REDACTED_{label}]", cleaned)
-    return cleaned, findings
+            count = len(matches) if not matches or isinstance(matches[0], str) else len(matches)
+            findings.append({"type": label, "count": count})
+            working = pattern.sub(f"[REDACTED_{label}]", working)
+        # Second pass on normalized form
+        norm = normalize_for_scan(working)
+        if norm != working:
+            norm_matches = pattern.findall(norm)
+            if norm_matches:
+                norm_count = len(norm_matches) if not norm_matches or isinstance(norm_matches[0], str) else len(norm_matches)
+                findings.append({"type": label, "count": norm_count})
+                working = pattern.sub(f"[REDACTED_{label}]", norm)
+    return working, findings
 
 
 def redact_request_body(body: bytes) -> tuple[bytes, list[dict]]:

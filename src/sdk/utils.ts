@@ -15,8 +15,41 @@ export const STATE_KEYS = {
 } as const;
 
 /**
+ * Zero-width and direction-override code points stripped before matching
+ * to prevent evasion via invisible Unicode characters.
+ */
+const ZERO_WIDTH_RE = /[\u200B\u200C\u200D\uFEFF\u202E]/g;
+
+/**
+ * Normalize text for pattern matching.
+ *
+ * 1. NFKC compatibility decomposition + canonical composition:
+ *    fullwidth digits (０-９ → 0-9), fullwidth hyphens (－ → -),
+ *    Arabic-Indic digits (٠-٩ → 0-9), Devanagari digits, etc.
+ * 2. Strip zero-width joiners/non-joiners/spaces, BOM, RTL override.
+ *
+ * The result is used for scanning only. Because all our replacement tokens
+ * are ASCII strings (e.g. "[REDACTED_EMAIL]"), operating on the normalized
+ * copy for both matching and replacement is correct and avoids the
+ * complexity of mapping normalized offsets back to the original string.
+ */
+export function normalizeForScan(text: string): string {
+  return text.normalize("NFKC").replace(ZERO_WIDTH_RE, "");
+}
+
+/**
  * Apply pattern groups to text in a single pass per pattern.
- * Uses replace callback to count matches without double-scanning.
+ *
+ * Both the original text and the NFKC-normalized copy are scanned.
+ * Replacements from the normalized copy are unioned with those from the
+ * original: each pattern first replaces on the original (for ASCII input),
+ * then the same regex runs on the normalized version of the working string
+ * to catch any remaining fullwidth/Arabic-Indic variants.
+ *
+ * This "double-pass" per pattern is intentional: after the first pass
+ * reduces ASCII hits, the second pass on the normalized remainder catches
+ * Unicode-encoded equivalents. The overhead is one extra regex per pattern
+ * group entry, negligible for typical prompt sizes.
  */
 export function applyPatterns(
   text: string,
@@ -27,12 +60,32 @@ export function applyPatterns(
 
   for (const group of groups) {
     for (const { name, regex, replacement } of group.patterns) {
-      regex.lastIndex = 0;
       let count = 0;
+
+      // Pass 1: match on the current (possibly partially-replaced) string
+      regex.lastIndex = 0;
       result = result.replace(regex, () => {
         count++;
         return replacement;
       });
+
+      // Pass 2: normalize and match again to catch Unicode evasion variants
+      // (fullwidth digits, Arabic-Indic, zero-width chars, RTL override).
+      // Only runs if the normalized form differs from the current string.
+      const norm = normalizeForScan(result);
+      if (norm !== result) {
+        regex.lastIndex = 0;
+        let normCount = 0;
+        const normResult = norm.replace(regex, () => {
+          normCount++;
+          return replacement;
+        });
+        if (normCount > 0) {
+          count += normCount;
+          result = normResult;
+        }
+      }
+
       if (count > 0) {
         findings.push({ type: name, count });
       }
