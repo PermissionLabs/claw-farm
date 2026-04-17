@@ -13,8 +13,11 @@
 
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import { defaultSecretPatterns } from "../sdk/secret-scanner.ts";
+import { emitPythonSecretPatterns } from "../sdk/patterns/python-emitter.ts";
 
 export function apiProxyServerTemplate(): string {
+  const secretPatternLines = emitPythonSecretPatterns(defaultSecretPatterns);
   return `"""
 API Proxy — key injection + PII redaction + response secret scanning.
 Sits between OpenClaw and external LLM APIs.
@@ -135,37 +138,12 @@ PII_PATTERNS = [
 COMPILED_PII = [(re.compile(p), label) for p, label in PII_PATTERNS]
 
 # --- Secret Patterns (response — strip secrets before they reach the agent) ---
+# Generated from src/sdk/secret-scanner.ts via python-emitter — single source of truth.
 SECRET_PATTERNS = [
-    # API Keys
-    (r"AIza[0-9A-Za-z_-]{35}", "GOOGLE_API_KEY"),
-    (r"sk-[A-Za-z0-9]{20,}", "OPENAI_KEY"),
-    (r"sk-ant-[A-Za-z0-9-]{80,}", "ANTHROPIC_KEY"),
-    (r"\\bghp_[A-Za-z0-9]{36}\\b", "GITHUB_PAT"),
-    (r"\\bgho_[A-Za-z0-9]{36}\\b", "GITHUB_OAUTH"),
-    (r"\\bghs_[A-Za-z0-9]{36}\\b", "GITHUB_APP"),
-    (r"\\bglpat-[A-Za-z0-9_-]{20,}\\b", "GITLAB_PAT"),
-
-    # AWS
-    (r"AKIA[0-9A-Z]{16}", "AWS_ACCESS_KEY"),
-    (r"ASIA[0-9A-Z]{16}", "AWS_TEMP_ACCESS_KEY"),
-    (r"FwoGZ[A-Za-z0-9/+=_-]{200,}", "AWS_SESSION_TOKEN"),
-    (r"(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY)[\\s=:]+[A-Za-z0-9/+=]{40}", "AWS_SECRET_KEY"),
-
-    # Stripe
-    (r"\\b[rs]k_live_[A-Za-z0-9]{24,}\\b", "STRIPE_KEY"),
-    (r"\\b[rs]k_test_[A-Za-z0-9]{24,}\\b", "STRIPE_TEST_KEY"),
-
-    # JWT / Bearer
-    (r"eyJ[A-Za-z0-9_-]{10,}\\.eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}", "JWT"),
-
-    # Private keys
-    (r"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----", "PRIVATE_KEY"),
-
-    # Generic long hex/base64 that look like secrets
-    (r"(?:token|secret|password|apikey|api_key)\\s*[=:]\\s*['\\"\\x60]?([A-Za-z0-9+/=_-]{32,})['\\"\\x60]?", "GENERIC_SECRET"),
+${secretPatternLines}
 ]
 
-COMPILED_SECRETS = [(re.compile(p, re.IGNORECASE), label) for p, label in SECRET_PATTERNS]
+COMPILED_SECRETS = [(pattern, label) for pattern, label in SECRET_PATTERNS]
 
 
 def redact_pii(text: str) -> tuple[str, list[dict]]:
@@ -220,10 +198,21 @@ def redact_request_body(body: bytes) -> tuple[bytes, list[dict]]:
 
 
 def scan_response_body(body: bytes) -> tuple[bytes, list[dict]]:
-    """Parse JSON response, strip secrets from all text fields, return cleaned body."""
+    """Parse JSON response, strip secrets from all text fields, return cleaned body.
+
+    For non-JSON bodies (SSE streams, plain text, HTML), raw-text scanning is applied
+    so that streaming responses are never bypassed.
+    """
     try:
         data = json.loads(body)
     except (json.JSONDecodeError, UnicodeDecodeError):
+        # Non-JSON (SSE, plain text, HTML): scan raw text so secrets are never bypassed.
+        text = body.decode("utf-8", errors="replace")
+        cleaned, secret_findings = scan_secrets(text)
+        cleaned2, pii_findings = redact_pii(cleaned)
+        all_findings = secret_findings + pii_findings
+        if all_findings:
+            return cleaned2.encode("utf-8", errors="replace"), all_findings
         return body, []
 
     all_findings = []
