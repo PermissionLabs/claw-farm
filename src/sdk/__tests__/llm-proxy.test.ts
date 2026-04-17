@@ -171,7 +171,7 @@ describe("createLlmProxy", () => {
     });
 
     expect(fetchCalls).toHaveLength(1);
-    const url = fetchCalls[0].url;
+    const url = fetchCalls[0]!.url;
     expect(url).toContain("safe-param=yes");
     expect(url).not.toContain("key=LEAKED_KEY");
     expect(url).not.toContain("evil=injection");
@@ -189,7 +189,7 @@ describe("createLlmProxy", () => {
     });
 
     expect(fetchCalls).toHaveLength(1);
-    expect(fetchCalls[0].headers["x-api-key"]).toBe("test-key-123");
+    expect(fetchCalls[0]!.headers["x-api-key"]).toBe("test-key-123");
   });
 
   it("runs middleware pipeline in onion order", async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { scanSecrets, scanResponseBody, defaultSecretPatterns } from "../secret-scanner.ts";
+import { scanSecrets, scanResponseBody } from "../secret-scanner.ts";
 
 describe("scanSecrets", () => {
   it("redacts Anthropic API keys", () => {
