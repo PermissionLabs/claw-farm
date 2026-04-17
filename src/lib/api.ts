@@ -57,14 +57,22 @@ async function resolveInstance(project: string, userId: string) {
   };
 }
 
+/**
+ * Spawn a new instance from a project template.
+ *
+ * On failure, the registry entry, instance directory, and any partially-started
+ * containers are rolled back automatically (unless `rollbackOnFailure` is false).
+ */
 export async function spawn(options: {
   project: string;
   userId: string;
   context?: Record<string, string>;
   env?: Record<string, string>;
   autoStart?: boolean;
+  /** Set to false to skip automatic rollback on failure. Default: true. */
+  rollbackOnFailure?: boolean;
 }): Promise<{ userId: string; port: number }> {
-  const { project, userId, context, env, autoStart = true } = options;
+  const { project, userId, context, env, autoStart = true, rollbackOnFailure = true } = options;
 
   // Validate userId (security: prevents path traversal via programmatic API)
   validateName(userId, "user ID");
@@ -187,11 +195,32 @@ export async function spawn(options: {
 
     return { userId, port };
   } catch (err) {
-    // Rollback: remove from registry on failure
-    try {
-      await removeInstance(projectName, userId);
-    } catch {
-      // Best effort rollback
+    if (rollbackOnFailure) {
+      // Rollback registry entry
+      try {
+        await removeInstance(projectName, userId);
+      } catch {
+        // Best effort rollback
+      }
+      // Rollback instance directory
+      const instDir = instanceDir(projectDir, userId);
+      try {
+        await rm(instDir, { recursive: true, force: true });
+      } catch {
+        // Best effort rollback
+      }
+      // Rollback any partially-started containers
+      const composeProject = `${projectName}-${userId}`;
+      try {
+        // intentional: best-effort teardown after spawn failure
+        const proc = Bun.spawn(
+          ["docker", "compose", "-p", composeProject, "down", "-v"],
+          { stderr: "pipe", stdout: "pipe" },
+        );
+        await proc.exited;
+      } catch {
+        // intentional: best-effort teardown after spawn failure
+      }
     }
     throw err;
   }
