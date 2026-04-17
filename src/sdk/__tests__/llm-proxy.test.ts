@@ -30,7 +30,7 @@ const originalFetch = globalThis.fetch;
 
 function installFetchMock() {
   fetchCalls = [];
-  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
     const headers: Record<string, string> = {};
     if (init?.headers) {
@@ -43,7 +43,7 @@ function installFetchMock() {
       status: mockResponseStatus,
       headers: { "content-type": "application/json", "server": "upstream-server" },
     });
-  };
+  }) as unknown as typeof fetch;
 }
 
 function uninstallFetchMock() {
@@ -74,7 +74,7 @@ describe("createLlmProxy", () => {
 
     expect(response.status).toBe(200);
     expect(fetchCalls).toHaveLength(1);
-    expect(fetchCalls[0].url).toBe("http://fake-upstream.internal/v1/chat");
+    expect(fetchCalls[0]!.url).toBe("http://fake-upstream.internal/v1/chat");
   });
 
   it("returns 403 for disallowed path prefix", async () => {
@@ -139,7 +139,7 @@ describe("createLlmProxy", () => {
     });
 
     expect(fetchCalls).toHaveLength(1);
-    const sentHeaders = fetchCalls[0].headers;
+    const sentHeaders = fetchCalls[0]!.headers;
     expect(Object.keys(sentHeaders).some((k) => k.toLowerCase().startsWith("x-forwarded-"))).toBe(false);
   });
 
