@@ -184,7 +184,7 @@ export async function spawn(options: {
     // Start if requested
     if (autoStart) {
       // Ensure shared proxy is running (generates compose if needed, starts it)
-      if (proxyMode === "shared" && runtimeType !== "openclaw") {
+      if (proxyMode === "shared" && runtime.supportsSharedProxy) {
         const proxyComposePath = join(projectDir, "docker-compose.proxy.yml");
         if (!await Bun.file(proxyComposePath).exists()) {
           // Generate proxy compose if missing
@@ -202,9 +202,7 @@ export async function spawn(options: {
       // container to this instance's isolated network (hub-and-spoke topology).
       // Docker Compose v2 names networks as: {project}_{network}
       const composeProject = `${projectName}-${userId}`;
-      const connectContainer = (proxyMode === "shared" && runtimeType !== "openclaw")
-        ? { container: `${projectName}-api-proxy`, network: `${composeProject}_instance-net` }
-        : undefined;
+      const connectContainer = runtime.connectContainerFor({ proxyMode, projectName, userId }) ?? undefined;
 
       await runCompose(projectDir, "up", {
         composePath,
@@ -255,10 +253,8 @@ export async function despawn(
     await resolveInstance(project, userId);
 
   const config = await readProjectConfig(projectDir);
-  const { runtimeType, proxyMode } = resolveRuntimeConfig(config, entry);
-  const connectContainer = (proxyMode === "shared" && runtimeType !== "openclaw")
-    ? { container: `${projectName}-api-proxy`, network: `${composeProject}_instance-net` }
-    : undefined;
+  const { runtime, proxyMode } = resolveRuntimeConfig(config, entry);
+  const connectContainer = runtime.connectContainerFor({ proxyMode, projectName, userId }) ?? undefined;
 
   try {
     await runCompose(projectDir, "down", {

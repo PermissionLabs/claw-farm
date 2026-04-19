@@ -1,5 +1,5 @@
 import { join, dirname } from "node:path";
-import type { RuntimeType, ProxyMode } from "../runtimes/interface.ts";
+import type { AgentRuntime, ProxyMode } from "../runtimes/interface.ts";
 import { fileExists } from "./fs-utils.ts";
 
 /** Canonical claw-farm compose filename. Used for all single-instance and instance compose files. */
@@ -107,16 +107,10 @@ async function dockerNetworkDisconnect(network: string, container: string): Prom
 export function sharedProxyConnect(
   projectName: string,
   userId: string,
-  runtimeType: RuntimeType,
+  runtime: AgentRuntime,
   proxyMode: ProxyMode,
 ): { container: string; network: string } | undefined {
-  if (proxyMode === "shared" && runtimeType !== "openclaw") {
-    return {
-      container: `${projectName}-api-proxy`,
-      network: `${projectName}-${userId}_instance-net`,
-    };
-  }
-  return undefined;
+  return runtime.connectContainerFor({ proxyMode, projectName, userId }) ?? undefined;
 }
 
 export async function getComposeStatus(

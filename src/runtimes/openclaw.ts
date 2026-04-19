@@ -3,7 +3,7 @@
  * Delegates to existing template functions — no behavior change.
  */
 
-import type { AgentRuntime, ProxyMode } from "./interface.ts";
+import type { AgentRuntime, ProxyMode, ConnectContainerOpts } from "./interface.ts";
 import type { LlmProvider } from "../lib/config.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 import { stripJsonComments } from "../lib/config.ts";
@@ -84,6 +84,12 @@ export const openclawRuntime: AgentRuntime = {
   gatewayPort: 18789,
   runtimeDirName: "openclaw",
   defaultProxyMode: "per-instance",
+  supportsSharedProxy: false,
+
+  connectContainerFor(_opts: ConnectContainerOpts): { container: string; network: string } | null {
+    // openclaw embeds api-proxy per-instance; shared-proxy topology is not supported
+    return null;
+  },
 
   composeTemplate(name: string, port: number, proxyMode?: ProxyMode): string {
     return baseComposeTemplate(name, port, proxyMode ?? this.defaultProxyMode);

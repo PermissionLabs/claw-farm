@@ -9,6 +9,12 @@ import type { LlmProvider } from "../lib/config.ts";
 export type RuntimeType = "openclaw" | "picoclaw";
 export type ProxyMode = "shared" | "per-instance" | "none";
 
+export interface ConnectContainerOpts {
+  proxyMode: ProxyMode;
+  projectName: string;
+  userId: string;
+}
+
 export interface AgentRuntime {
   /** Runtime identifier */
   name: RuntimeType;
@@ -33,6 +39,20 @@ export interface AgentRuntime {
 
   /** Default proxy mode for this runtime */
   defaultProxyMode: ProxyMode;
+
+  /**
+   * Whether this runtime can participate in shared-proxy topology.
+   * openclaw embeds api-proxy per-instance, so this is false.
+   * picoclaw supports a shared api-proxy, so this is true.
+   */
+  supportsSharedProxy: boolean;
+
+  /**
+   * Return the container + network to connect for shared-proxy topology,
+   * or null when not applicable (runtime doesn't support it, or proxyMode != "shared").
+   * Encapsulates the former `proxyMode === "shared" && runtimeType !== "openclaw"` check.
+   */
+  connectContainerFor(opts: ConnectContainerOpts): { container: string; network: string } | null;
 
   /** Generate base docker-compose for single-instance projects */
   composeTemplate(name: string, port: number, proxyMode?: ProxyMode): string;
