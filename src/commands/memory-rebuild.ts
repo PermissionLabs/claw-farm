@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { readdir } from "node:fs/promises";
+import { isNotFoundError } from "../lib/errors.ts";
 import { resolveProjectName, findPositionalArg } from "../lib/registry.ts";
 import { readProjectConfig, resolveRuntimeConfig } from "../lib/config.ts";
 import { instanceDir } from "../lib/instance.ts";
@@ -78,7 +79,8 @@ async function rebuildInstanceMemory(
       console.log(`    Found ${jsonlFiles.length} session log(s) to process`);
       // TODO: Parse JSONL and POST to Mem0 /memories/add
       console.log("    (Full re-indexing not yet implemented — raw data preserved)");
-    } catch {
+    } catch (err) {
+      if (!isNotFoundError(err)) throw err;
       console.log("    Sessions directory not found — nothing to rebuild");
     }
     return;
@@ -96,7 +98,8 @@ async function rebuildInstanceMemory(
     const memoryContent = await Bun.file(join(snapshotsDir, latest, "MEMORY.md")).text();
     await Bun.write(memoryPath, memoryContent);
     console.log(`    Rebuilt MEMORY.md from snapshot: ${latest}`);
-  } catch {
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
     console.log("    No snapshots available — skipping rebuild");
   }
 }

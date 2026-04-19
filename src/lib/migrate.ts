@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { mkdir, cp, readdir } from "node:fs/promises";
+import { isNotFoundError } from "./errors.ts";
 import { loadRegistry, saveRegistry, withLock } from "./registry.ts";
 import { readProjectConfig, writeProjectConfig } from "./config.ts";
 import { ensureTemplateDirs, templateDir } from "./instance.ts";
@@ -48,7 +49,8 @@ export async function migrateToMulti(
     for (const file of files) {
       await cp(join(skillsDir, file), join(tmplDir, "skills", file), { recursive: true });
     }
-  } catch {
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
     // No skills directory
   }
 
@@ -130,7 +132,8 @@ export async function migrateToMulti(
         await cp(join(sessionsDir, file), join(sessionsDest, file), { recursive: true });
       }
       break;
-    } catch {
+    } catch (err) {
+      if (!isNotFoundError(err)) throw err;
       // Try next location
     }
   }
@@ -150,7 +153,8 @@ export async function migrateToMulti(
         );
       }
       break;
-    } catch {
+    } catch (err) {
+      if (!isNotFoundError(err)) throw err;
       // Try next location
     }
   }
@@ -170,7 +174,8 @@ export async function migrateToMulti(
         );
       }
       break;
-    } catch {
+    } catch (err) {
+      if (!isNotFoundError(err)) throw err;
       // Try next location
     }
   }
@@ -180,7 +185,8 @@ export async function migrateToMulti(
   let gitignoreContent = "";
   try {
     gitignoreContent = await Bun.file(gitignorePath).text();
-  } catch {
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
     // No .gitignore yet
   }
 

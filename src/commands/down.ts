@@ -4,16 +4,16 @@ import { readProjectConfig, resolveRuntimeConfig } from "../lib/config.ts";
 import { runCompose, sharedProxyConnect, COMPOSE_FILENAME } from "../lib/compose.ts";
 import { snapshotWorkspace } from "../lib/raw-collector.ts";
 import { instanceDir } from "../lib/instance.ts";
-import type { RuntimeType, ProxyMode } from "../runtimes/index.ts";
+import type { AgentRuntime, ProxyMode } from "../runtimes/interface.ts";
 
 /** Stop shared proxy compose if no instances remain running. */
 async function stopSharedProxy(
   projectDir: string,
   projectName: string,
-  runtimeType: RuntimeType,
+  runtime: AgentRuntime,
   proxyMode: ProxyMode,
 ): Promise<void> {
-  if (proxyMode !== "shared" || runtimeType === "openclaw") return;
+  if (proxyMode !== "shared" || !runtime.supportsSharedProxy) return;
   const proxyComposePath = join(projectDir, "docker-compose.proxy.yml");
   if (!await Bun.file(proxyComposePath).exists()) {
     return; // No proxy compose file
@@ -45,7 +45,7 @@ export async function downCommand(args: string[]): Promise<void> {
       const project = reg.projects[name];
       if (!project) continue;
       const config = await readProjectConfig(project.path);
-      const { runtimeType, proxyMode } = resolveRuntimeConfig(config, project);
+      const { runtimeType, runtime, proxyMode } = resolveRuntimeConfig(config, project);
 
       if (project.multiInstance) {
         const userIds = Object.keys(project.instances ?? {});
@@ -57,12 +57,12 @@ export async function downCommand(args: string[]): Promise<void> {
             await runCompose(project.path, "down", {
               composePath,
               projectName: `${name}-${uid}`,
-              connectContainer: sharedProxyConnect(name, uid, runtimeType, proxyMode),
+              connectContainer: sharedProxyConnect(name, uid, runtime, proxyMode),
             });
           } catch {}
         }));
         // Stop shared proxy after all instances
-        await stopSharedProxy(project.path, name, runtimeType, proxyMode);
+        await stopSharedProxy(project.path, name, runtime, proxyMode);
       } else {
         console.log(`\n■ Stopping ${name}...`);
         try {
@@ -78,7 +78,7 @@ export async function downCommand(args: string[]): Promise<void> {
   const name = findPositionalArg(args);
   const { name: projectName, entry } = await resolveProjectName(name);
   const config = await readProjectConfig(entry.path);
-  const { runtimeType, proxyMode } = resolveRuntimeConfig(config, entry);
+  const { runtimeType, runtime, proxyMode } = resolveRuntimeConfig(config, entry);
 
   if (entry.multiInstance && userId) {
     const instance = await getInstance(projectName, userId);
@@ -91,7 +91,7 @@ export async function downCommand(args: string[]): Promise<void> {
     await runCompose(entry.path, "down", {
       composePath,
       projectName: `${projectName}-${userId}`,
-      connectContainer: sharedProxyConnect(projectName, userId, runtimeType, proxyMode),
+      connectContainer: sharedProxyConnect(projectName, userId, runtime, proxyMode),
     });
     console.log(`\n✅ ${projectName}/${userId} stopped.`);
     return;
@@ -111,12 +111,12 @@ export async function downCommand(args: string[]): Promise<void> {
         await runCompose(entry.path, "down", {
           composePath,
           projectName: `${projectName}-${uid}`,
-          connectContainer: sharedProxyConnect(projectName, uid, runtimeType, proxyMode),
+          connectContainer: sharedProxyConnect(projectName, uid, runtime, proxyMode),
         });
       } catch {}
     }));
     // Stop shared proxy after all instances are down
-    await stopSharedProxy(entry.path, projectName, runtimeType, proxyMode);
+    await stopSharedProxy(entry.path, projectName, runtime, proxyMode);
     console.log(`\n✅ All ${userIds.length} instance(s) of ${projectName} stopped.`);
     return;
   }

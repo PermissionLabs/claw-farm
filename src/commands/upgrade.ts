@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import { isNotFoundError } from "../lib/errors.ts";
 import { resolveProjectName, findPositionalArg, type ProjectEntry } from "../lib/registry.ts";
 import { copyTemplateFiles } from "../lib/api.ts";
 import { readProjectConfig, resolveRuntimeConfig, envExampleTemplate } from "../lib/config.ts";
@@ -174,7 +175,8 @@ export async function upgradeCommand(args: string[]): Promise<void> {
   let existingConfig: string | null = null;
   try {
     existingConfig = await Bun.file(configPath).text();
-  } catch {
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
     // No existing config
   }
   if (existingConfig) {
@@ -197,7 +199,8 @@ export async function upgradeCommand(args: string[]): Promise<void> {
         try {
           await Bun.file(cfgPath).text();
           console.log(`✓ ${rtDir}/${configFile} already exists — skipped (use --force-policy to overwrite)`);
-        } catch {
+        } catch (err) {
+          if (!isNotFoundError(err)) throw err;
           await Bun.write(cfgPath, policyTemplate(projectName));
           console.log(`✓ Created ${rtDir}/${configFile}`);
         }
@@ -247,7 +250,8 @@ async function upgradeMultiInstance(
   let existingConfig: string | null = null;
   try {
     existingConfig = await Bun.file(configPath).text();
-  } catch {
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
     // No existing config
   }
   if (existingConfig) {
@@ -270,7 +274,8 @@ async function upgradeMultiInstance(
         try {
           await Bun.file(cfgPath).text();
           console.log(`✓ template/config/${configFile} already exists — skipped (use --force-policy to overwrite)`);
-        } catch {
+        } catch (err) {
+          if (!isNotFoundError(err)) throw err;
           await Bun.write(cfgPath, policyTemplate(projectName));
           console.log(`✓ Created template/config/${configFile}`);
         }

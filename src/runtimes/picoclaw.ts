@@ -5,7 +5,7 @@
  * feature is for role-based agents, not per-user isolation).
  */
 
-import type { AgentRuntime, ProxyMode } from "./interface.ts";
+import type { AgentRuntime, ProxyMode, ConnectContainerOpts } from "./interface.ts";
 import type { LlmProvider } from "../lib/config.ts";
 import { picoClawComposeTemplate, picoClawInstanceComposeTemplate, picoClawInstanceSharedProxyComposeTemplate, picoClawProxyComposeTemplate } from "../templates/docker-compose.picoclaw.yml.ts";
 import { picoClawConfigTemplate } from "../templates/picoclaw.config.json.ts";
@@ -20,6 +20,15 @@ export const picoClawRuntime: AgentRuntime = {
   gatewayPort: 18790,
   runtimeDirName: "picoclaw",
   defaultProxyMode: "shared",
+  supportsSharedProxy: true,
+
+  connectContainerFor({ proxyMode, projectName, userId }: ConnectContainerOpts): { container: string; network: string } | null {
+    if (proxyMode !== "shared") return null;
+    return {
+      container: `${projectName}-api-proxy`,
+      network: `${projectName}-${userId}_instance-net`,
+    };
+  },
 
   composeTemplate(name: string, port: number, proxyMode?: ProxyMode): string {
     return picoClawComposeTemplate(name, port, proxyMode ?? this.defaultProxyMode);

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { mkdir, chmod } from "node:fs/promises";
+import { isNotFoundError } from "../lib/errors.ts";
 import { addProject, loadRegistry, saveRegistry, withLock, findPositionalArg } from "../lib/registry.ts";
 import { writeSecret } from "../lib/secret-file.ts";
 import { writeProjectConfig, envExampleTemplate, type LlmProvider } from "../lib/config.ts";
@@ -207,7 +208,8 @@ async function registerExisting(
     const backupPath = configPath + ".backup";
     await Bun.write(backupPath, existingContent);
     console.log(`✓ Backed up existing ${runtime.configFileName} → ${runtime.configFileName}.backup`);
-  } catch {
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
     // No existing config — that's fine
   }
   await Bun.write(configPath, runtime.configTemplate(name, processor, llm));
@@ -219,7 +221,8 @@ async function registerExisting(
     try {
       await Bun.file(cfgPath).text();
       console.log(`✓ ${configFile} already exists — skipped`);
-    } catch {
+    } catch (err) {
+      if (!isNotFoundError(err)) throw err;
       if (configFile === "policy.yaml") {
         await Bun.write(cfgPath, policyTemplate(name));
       }
@@ -244,7 +247,8 @@ async function registerExisting(
   try {
     await Bun.file(envExamplePath).text();
     console.log("✓ .env.example already exists — skipped");
-  } catch {
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
     await Bun.write(envExamplePath, envExampleTemplate(llm, processor));
     console.log("✓ Generated .env.example");
   }
@@ -254,13 +258,15 @@ async function registerExisting(
   try {
     await Bun.file(envPath).text();
     console.log("✓ .env already exists — skipped");
-  } catch {
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
     try {
       const example = await Bun.file(envExamplePath).text();
       await Bun.write(envPath, example);
       await chmod(envPath, 0o600);
       console.log("✓ Created .env from .env.example (fill in your API keys!)");
-    } catch {
+    } catch (innerErr) {
+      if (!isNotFoundError(innerErr)) throw innerErr;
       // No .env.example either — skip
     }
   }
