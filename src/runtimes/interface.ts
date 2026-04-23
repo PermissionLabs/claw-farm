@@ -4,7 +4,7 @@
  * and compose templates — orthogonal to the memory processor (builtin/mem0).
  */
 
-import type { LlmProvider } from "../lib/config.ts";
+export type LlmProvider = "gemini" | "anthropic" | "openai-compat";
 
 export type RuntimeType = "openclaw" | "picoclaw";
 export type ProxyMode = "shared" | "per-instance" | "none";

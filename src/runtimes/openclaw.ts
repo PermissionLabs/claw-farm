@@ -3,10 +3,9 @@
  * Delegates to existing template functions — no behavior change.
  */
 
-import type { AgentRuntime, ProxyMode, ConnectContainerOpts } from "./interface.ts";
-import type { LlmProvider } from "../lib/config.ts";
+import type { AgentRuntime, LlmProvider, ProxyMode, ConnectContainerOpts } from "./interface.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
-import { stripJsonComments } from "../lib/config.ts";
+import { stripJsonComments } from "../lib/json-comments.ts";
 import { baseComposeTemplate } from "../templates/docker-compose.yml.ts";
 import { instanceComposeTemplate } from "../templates/docker-compose.instance.yml.ts";
 import { openclawConfigTemplate } from "../templates/openclaw.json.ts";
@@ -58,13 +57,20 @@ export function mergeOpenclawConfig(
         }
       }
     }
-    // Ensure controlUi.enabled from template is applied, but preserve user's
-    // other controlUi settings (allowedOrigins, dangerouslyDisableDeviceAuth, etc.)
+    // Ensure controlUi.enabled from template is applied.
+    // When template forces enabled: false, also force dangerouslyDisableDeviceAuth: false
+    // to prevent a stale dangerous flag from re-exposing the UI if enabled is later re-enabled.
     const mergedGateway = (merged.gateway ?? {}) as Record<string, unknown>;
     const templateControlUi = ((template.gateway ?? {}) as Record<string, unknown>).controlUi as Record<string, unknown> | undefined;
     if (templateControlUi) {
       const userControlUi = (mergedGateway.controlUi ?? {}) as Record<string, unknown>;
-      mergedGateway.controlUi = { ...userControlUi, enabled: templateControlUi.enabled };
+      const forcedEnabled = templateControlUi.enabled;
+      const controlUi: Record<string, unknown> = { ...userControlUi, enabled: forcedEnabled };
+      // When UI is disabled by template, also zero out the dangerous bypass flag
+      if (forcedEnabled === false) {
+        controlUi.dangerouslyDisableDeviceAuth = false;
+      }
+      mergedGateway.controlUi = controlUi;
     }
     // Remove root-level controlUi if present (OpenClaw reads gateway.controlUi)
     delete merged.controlUi;

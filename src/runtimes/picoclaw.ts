@@ -5,11 +5,10 @@
  * feature is for role-based agents, not per-user isolation).
  */
 
-import type { AgentRuntime, ProxyMode, ConnectContainerOpts } from "./interface.ts";
-import type { LlmProvider } from "../lib/config.ts";
+import type { AgentRuntime, LlmProvider, ProxyMode, ConnectContainerOpts } from "./interface.ts";
 import { picoClawComposeTemplate, picoClawInstanceComposeTemplate, picoClawInstanceSharedProxyComposeTemplate, picoClawProxyComposeTemplate } from "../templates/docker-compose.picoclaw.yml.ts";
 import { picoClawConfigTemplate } from "../templates/picoclaw.config.json.ts";
-import { deepMerge } from "../lib/config.ts";
+import { deepMerge } from "../lib/deep-merge.ts";
 
 export const picoClawRuntime: AgentRuntime = {
   name: "picoclaw",
