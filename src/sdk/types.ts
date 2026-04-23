@@ -107,4 +107,10 @@ export interface LlmProxyOptions {
    * Set allowPrivate/allowLoopback to opt-in to non-public upstreams.
    */
   ssrfOptions?: import("./lib/url-safety.ts").UrlSafetyOptions;
+  /**
+   * Audit loggers to flush when close() is called.
+   * Pass any AuditLogger instances used in the pipeline so that
+   * close() guarantees all buffered writes land on disk before shutdown.
+   */
+  auditLoggers?: ReadonlyArray<{ flush: () => Promise<void> }>;
 }

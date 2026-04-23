@@ -45,6 +45,7 @@ export function createLlmProxy(options: LlmProxyOptions) {
     maxSizeMb = DEFAULT_MAX_SIZE_MB,
     forwardHeaders = DEFAULT_FORWARD_HEADERS,
     ssrfOptions,
+    auditLoggers = [],
   } = options;
 
   const pipeline: RequestMiddleware[] =
@@ -248,8 +249,11 @@ export function createLlmProxy(options: LlmProxyOptions) {
     return dispatch();
   }
 
-  function close() {
-    // Reserved for future cleanup (connection pools, etc.)
+  async function close(): Promise<void> {
+    // Flush all registered audit loggers before shutdown
+    if (auditLoggers.length > 0) {
+      await Promise.all(auditLoggers.map((al) => al.flush()));
+    }
   }
 
   return { proxy, close };

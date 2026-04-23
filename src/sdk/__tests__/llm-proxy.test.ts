@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createLlmProxy } from "../llm-proxy.ts";
+import { createAuditLogger } from "../audit-logger.ts";
 import type { LlmProvider } from "../types.ts";
 
 // Minimal fake provider for pipeline tests
@@ -223,5 +227,85 @@ describe("createLlmProxy", () => {
     });
 
     expect(order).toEqual(["A-before", "B-before", "B-after", "A-after"]);
+  });
+});
+
+describe("createLlmProxy — close() flushes audit loggers (BKLG-036)", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    delete process.env["AUDIT_LOG_HMAC_KEY"];
+    tmpDir = await mkdtemp(join(tmpdir(), "proxy-flush-test-"));
+    installFetchMock();
+  });
+
+  afterEach(async () => {
+    uninstallFetchMock();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("close() flushes buffered audit log entries to disk", async () => {
+    const logPath = join(tmpDir, "audit.jsonl");
+    const logger = createAuditLogger({ path: logPath });
+
+    const { close } = createLlmProxy({
+      provider: fakeProvider,
+      pipeline: [],
+      ssrfOptions: testSsrfOptions,
+      auditLoggers: [logger],
+    });
+
+    // Fire N log entries via the logger (simulating what auditLogger middleware does)
+    logger.log({ event: "req-1", path: "/v1/chat" });
+    logger.log({ event: "req-2", path: "/v1/chat" });
+    logger.log({ event: "req-3", path: "/v1/chat" });
+
+    // close() must flush all pending writes
+    await close();
+
+    const lines = (await readFile(logPath, "utf-8"))
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
+
+    expect(lines.length).toBe(3);
+    expect(lines[0].event).toBe("req-1");
+    expect(lines[2].event).toBe("req-3");
+  });
+
+  it("close() with no audit loggers resolves without error", async () => {
+    const { close } = createLlmProxy({
+      provider: fakeProvider,
+      pipeline: [],
+      ssrfOptions: testSsrfOptions,
+    });
+
+    await expect(close()).resolves.toBeUndefined();
+  });
+
+  it("close() flushes multiple audit loggers", async () => {
+    const logPath1 = join(tmpDir, "audit1.jsonl");
+    const logPath2 = join(tmpDir, "audit2.jsonl");
+    const logger1 = createAuditLogger({ path: logPath1 });
+    const logger2 = createAuditLogger({ path: logPath2 });
+
+    const { close } = createLlmProxy({
+      provider: fakeProvider,
+      pipeline: [],
+      ssrfOptions: testSsrfOptions,
+      auditLoggers: [logger1, logger2],
+    });
+
+    logger1.log({ event: "a" });
+    logger2.log({ event: "b" });
+
+    await close();
+
+    const lines1 = (await readFile(logPath1, "utf-8")).trim().split("\n").filter(Boolean);
+    const lines2 = (await readFile(logPath2, "utf-8")).trim().split("\n").filter(Boolean);
+
+    expect(lines1.length).toBe(1);
+    expect(lines2.length).toBe(1);
   });
 });
