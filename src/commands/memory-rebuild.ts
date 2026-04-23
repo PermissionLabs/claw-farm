@@ -4,6 +4,7 @@ import { isNotFoundError } from "../lib/errors.ts";
 import { resolveProjectName, findPositionalArg } from "../lib/registry.ts";
 import { readProjectConfig, resolveRuntimeConfig } from "../lib/config.ts";
 import { instanceDir } from "../lib/instance.ts";
+import { projectKindOf } from "../lib/project-kind.ts";
 import { builtinProcessor } from "../processors/builtin.ts";
 import { mem0Processor } from "../processors/mem0.ts";
 import type { RuntimeType } from "../runtimes/interface.ts";
@@ -18,8 +19,9 @@ export async function memoryRebuildCommand(args: string[]): Promise<void> {
   const config = await readProjectConfig(entry.path);
   const processor = config?.processor ?? entry.processor;
   const { runtimeType } = resolveRuntimeConfig(config, entry);
+  const kind = projectKindOf(entry);
 
-  if (entry.multiInstance && userId) {
+  if (kind.name === "multi" && userId) {
     // Rebuild specific instance memory
     console.log(`\n🔄 Rebuilding memory for ${projectName}/${userId}...`);
     await rebuildInstanceMemory(entry.path, userId, processor, runtimeType);
@@ -27,10 +29,9 @@ export async function memoryRebuildCommand(args: string[]): Promise<void> {
     return;
   }
 
-  if (entry.multiInstance && !userId) {
+  if (kind.name === "multi" && !userId) {
     // Rebuild all instance memories
-    const instances = entry.instances ?? {};
-    const userIds = Object.keys(instances);
+    const userIds = kind.listUserIds(entry);
     console.log(`\n🔄 Rebuilding memory for all ${userIds.length} instance(s) of ${projectName}...`);
     for (const uid of userIds) {
       console.log(`\n  → ${uid}`);

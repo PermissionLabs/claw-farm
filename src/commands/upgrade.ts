@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { isNotFoundError } from "../lib/errors.ts";
 import { resolveProjectName, findPositionalArg, type ProjectEntry } from "../lib/registry.ts";
+import { projectKindOf } from "../lib/project-kind.ts";
 import { copyTemplateFiles } from "../lib/api.ts";
 import { readProjectConfig, resolveRuntimeConfig, envExampleTemplate } from "../lib/config.ts";
 import { ensureRawDirs } from "../lib/raw-collector.ts";
@@ -144,7 +145,7 @@ export async function upgradeCommand(args: string[]): Promise<void> {
   console.log(`   Multi-instance: ${entry.multiInstance ? "yes" : "no"}`);
   console.log(`   Path: ${projectDir}\n`);
 
-  if (entry.multiInstance) {
+  if (projectKindOf(entry).name === "multi") {
     return upgradeMultiInstance(args, projectName, entry, projectDir, processor, llm, runtimeType);
   }
 
