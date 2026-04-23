@@ -9,6 +9,8 @@ import { getRuntimePaths } from "../runtimes/paths.ts";
  */
 export const mem0Processor: MemoryProcessor = {
   name: "mem0",
+  // picoclaw runtime is not yet supported by mem0 — confirmed by grep of migrate-runtime.ts check
+  supportedRuntimes: ["openclaw"],
 
   async init(projectDir: string) {
     const mem0Dir = join(projectDir, "mem0");
@@ -55,6 +57,7 @@ google-genai==1.14.0
 import logging
 import os
 import secrets
+import sys
 from contextlib import asynccontextmanager
 from typing import Literal
 
@@ -67,6 +70,26 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 MEM0_API_KEY = os.environ.get("MEM0_API_KEY", "")
 QDRANT_HOST = os.environ.get("QDRANT_HOST", "qdrant")
 QDRANT_PORT = int(os.environ.get("QDRANT_PORT", "6333"))
+# ENVIRONMENT controls auth strictness.
+# Set ENVIRONMENT=production to require MEM0_API_KEY at startup.
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
+
+# Fail-closed startup check: in production, MEM0_API_KEY must be set.
+if ENVIRONMENT == "production" and not MEM0_API_KEY:
+    print(
+        "FATAL: MEM0_API_KEY must be set when ENVIRONMENT=production. "
+        "Set a strong random key to secure the Mem0 API.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+if not MEM0_API_KEY:
+    print(
+        "WARNING: MEM0_API_KEY is not set. "
+        "The Mem0 API is open to any caller on the network. "
+        "Set ENVIRONMENT=production and MEM0_API_KEY to enforce authentication.",
+        file=sys.stderr,
+    )
 
 MEM0_CONFIG = {
     "vector_store": {
@@ -188,6 +211,9 @@ async def delete_memory(memory_id: str):
       `GEMINI_API_KEY=
 # WARNING: Leave empty only for local development. Set a key for cloud deployments.
 MEM0_API_KEY=
+# Set ENVIRONMENT=production to require MEM0_API_KEY at startup (fail-closed).
+# In production: ENVIRONMENT=production and MEM0_API_KEY must both be set.
+# ENVIRONMENT=dev
 `,
     );
   },
