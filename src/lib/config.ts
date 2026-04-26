@@ -1,15 +1,14 @@
 import { join } from "node:path";
 
-import type { RuntimeType, ProxyMode, AgentRuntime } from "../runtimes/interface.ts";
+import type { LlmProvider, RuntimeType, ProxyMode, AgentRuntime } from "../runtimes/interface.ts";
 import { getRuntime } from "../runtimes/index.ts";
 import type { ProjectEntry } from "./registry.ts";
 import { writeSecret } from "./secret-file.ts";
 
-// Re-export deepMerge from its canonical location.
-// picoclaw.ts imports deepMerge from this module — keep the re-export for compat.
+// Re-export for backward compatibility.
 export { deepMerge } from "./deep-merge.ts";
-
-export type LlmProvider = "gemini" | "anthropic" | "openai-compat";
+export { stripJsonComments } from "./json-comments.ts";
+export type { LlmProvider } from "../runtimes/interface.ts";
 
 export interface ClawFarmConfig {
   name: string;
@@ -95,51 +94,5 @@ export async function readProjectConfig(
   }
 }
 
-/**
- * Strip JS-style comments from a JSON-like string so JSON.parse can handle it.
- *
- * Supported syntax subset:
- *   - `//` line comments (stripped to end of line)
- *   - `/* ... *\/` block comments (stripped, may span lines)
- *   - String literals are passed through unchanged (including `"// inside string"`)
- *   - Escape sequences inside strings (`\"`, `\\`) are handled correctly
- *
- * Not supported: regex literals, template strings, nested block comments.
- */
-export function stripJsonComments(text: string): string {
-  let result = "";
-  let i = 0;
-  while (i < text.length) {
-    // String literal — pass through unchanged
-    if (text[i] === '"') {
-      result += '"';
-      i++;
-      while (i < text.length && text[i] !== '"') {
-        if (text[i] === "\\") {
-          result += text[i] + (text[i + 1] ?? "");
-          i += 2;
-        } else {
-          result += text[i];
-          i++;
-        }
-      }
-      if (i < text.length) {
-        result += '"';
-        i++;
-      }
-    } else if (text[i] === "/" && text[i + 1] === "/") {
-      // Line comment — skip to end of line
-      while (i < text.length && text[i] !== "\n") i++;
-    } else if (text[i] === "/" && text[i + 1] === "*") {
-      // Block comment — skip to */
-      i += 2;
-      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++;
-      i += 2;
-    } else {
-      result += text[i];
-      i++;
-    }
-  }
-  return result;
-}
+// stripJsonComments moved to src/lib/json-comments.ts — re-exported above.
 

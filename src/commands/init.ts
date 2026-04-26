@@ -16,6 +16,7 @@ import { ensureTemplateDirs, templateDir } from "../lib/instance.ts";
 import { userTemplateContent } from "../templates/USER.template.md.ts";
 import { getRuntime, type RuntimeType, type ProxyMode } from "../runtimes/index.ts";
 import { parseEnumFlag, hasFlag } from "../lib/cli-parser.ts";
+import { validateProcessorRuntimeCombo } from "../lib/validate-config.ts";
 
 export async function initCommand(args: string[]): Promise<void> {
   const name = findPositionalArg(args);
@@ -44,10 +45,11 @@ export async function initCommand(args: string[]): Promise<void> {
   const VALID_PROXY_MODES = ["shared", "per-instance", "none"] as const;
   const proxyMode = parseEnumFlag(args, "--proxy-mode", VALID_PROXY_MODES, runtime.defaultProxyMode);
 
-  // Block unsupported combinations
-  if (processor === "mem0" && runtimeType === "picoclaw") {
-    console.error("Error: mem0 processor is not yet supported with picoclaw runtime.");
-    console.error("Use --processor builtin (default) with --runtime picoclaw.");
+  // Block unsupported combinations (delegated to central registry)
+  try {
+    validateProcessorRuntimeCombo(processor, runtimeType);
+  } catch (err) {
+    console.error(`Error: ${(err as Error).message}`);
     process.exit(1);
   }
 

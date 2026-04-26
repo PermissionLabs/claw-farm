@@ -9,6 +9,7 @@ import {
 import { readProjectConfig, resolveRuntimeConfig, writeProjectConfig } from "../lib/config.ts";
 import { runCompose, COMPOSE_FILENAME } from "../lib/compose.ts";
 import { instanceDir, templateDir, ensureInstanceDirs } from "../lib/instance.ts";
+import { projectKindOf } from "../lib/project-kind.ts";
 import { getRuntime, type RuntimeType, type ProxyMode } from "../runtimes/index.ts";
 import { policyTemplate } from "../templates/policy.yaml.ts";
 import { fileExists, copyIfExists, copyDirContents } from "../lib/fs-utils.ts";
@@ -271,18 +272,18 @@ export async function migrateRuntimeCommand(args: string[]): Promise<void> {
   console.log(`   Multi-instance: ${entry.multiInstance ? "yes" : "no"}`);
   console.log(`   Path: ${projectDir}\n`);
 
+  const kind = projectKindOf(entry);
+
   // Step 1: Stop running containers
   console.log("■ Stopping running containers...");
   try {
-    if (entry.multiInstance) {
-      const userIds = Object.keys(entry.instances ?? {});
+    if (kind.name === "multi") {
+      const userIds = kind.listUserIds(entry);
       for (const uid of userIds) {
-        const instDir = instanceDir(projectDir, uid);
-        const composePath = join(instDir, COMPOSE_FILENAME);
         try {
           await runCompose(projectDir, "down", {
-            composePath,
-            projectName: `${projectName}-${uid}`,
+            composePath: kind.composePath(projectDir, "", uid),
+            projectName: kind.composeProjectName(projectName, uid),
           });
         } catch {
           // intentional: best-effort container stop before migration
@@ -302,7 +303,7 @@ export async function migrateRuntimeCommand(args: string[]): Promise<void> {
   }
 
   // Step 2: Migrate files
-  if (entry.multiInstance) {
+  if (kind.name === "multi") {
     // Update template/config/
     const tmplDir = templateDir(projectDir);
     const tmplConfigDir = join(tmplDir, "config");

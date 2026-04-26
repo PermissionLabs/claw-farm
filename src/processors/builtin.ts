@@ -9,6 +9,8 @@ import { getRuntimePaths } from "../runtimes/paths.ts";
  */
 export const builtinProcessor: MemoryProcessor = {
   name: "builtin",
+  // Supports both runtimes explicitly; empty list would also work but explicit is clearer
+  supportedRuntimes: ["openclaw", "picoclaw"],
 
   async init(projectDir: string) {
     await mkdir(join(projectDir, "processed"), { recursive: true });
