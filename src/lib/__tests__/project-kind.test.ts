@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { join, resolve, sep } from "node:path";
+import { join, resolve } from "node:path";
 import { projectKindOf } from "../project-kind.ts";
 import { COMPOSE_FILENAME } from "../compose.ts";
 import type { ProjectEntry } from "../registry.ts";

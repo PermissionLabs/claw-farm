@@ -55,7 +55,7 @@ export async function downCommand(args: string[]): Promise<void> {
             await runCompose(project.path, "down", {
               composePath: kind.composePath(project.path, "", uid),
               projectName: kind.composeProjectName(name, uid),
-              connectContainer: sharedProxyConnect(name, uid, runtime, proxyMode),
+              connectContainer: sharedProxyConnect(name, uid!, runtime, proxyMode),
             });
           } catch {
             // intentional: best-effort per-instance teardown
@@ -108,7 +108,7 @@ export async function downCommand(args: string[]): Promise<void> {
         await runCompose(entry.path, "down", {
           composePath: kind.composePath(entry.path, "", uid),
           projectName: kind.composeProjectName(projectName, uid),
-          connectContainer: sharedProxyConnect(projectName, uid, runtime, proxyMode),
+          connectContainer: sharedProxyConnect(projectName, uid!, runtime, proxyMode),
         });
       } catch {
         // intentional: best-effort per-instance teardown

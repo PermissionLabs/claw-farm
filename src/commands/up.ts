@@ -52,7 +52,7 @@ export async function upCommand(args: string[]): Promise<void> {
           await runCompose(project.path, "up", {
             composePath: kind.composePath(project.path, "", uid),
             projectName: kind.composeProjectName(name, uid),
-            connectContainer: sharedProxyConnect(name, uid, runtime, proxyMode),
+            connectContainer: sharedProxyConnect(name, uid!, runtime, proxyMode),
           });
         });
       } else {
@@ -100,7 +100,7 @@ export async function upCommand(args: string[]): Promise<void> {
       await runCompose(entry.path, "up", {
         composePath: kind.composePath(entry.path, "", uid),
         projectName: kind.composeProjectName(projectName, uid),
-        connectContainer: sharedProxyConnect(projectName, uid, runtime, proxyMode),
+        connectContainer: sharedProxyConnect(projectName, uid!, runtime, proxyMode),
       });
     });
     console.log(`\n✅ All ${userIds.length} instance(s) of ${projectName} started.`);
