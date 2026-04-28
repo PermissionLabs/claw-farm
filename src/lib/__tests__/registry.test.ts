@@ -80,4 +80,28 @@ describe("withLock stale lock cleanup", () => {
     const result = await withLock(async () => "after stale");
     expect(result).toBe("after stale");
   });
+
+  // BKLG-037: monotonic stale detection — structured lock content with startTime
+  it("cleans up a stale structured lock (monotonic) with a dead PID and proceeds", async () => {
+    const { homedir } = await import("node:os");
+    const lockPath = join(homedir(), ".claw-farm", "registry.lock");
+    const lockDir = join(homedir(), ".claw-farm");
+    await mkdir(lockDir, { recursive: true });
+
+    const deadPid = 9999999;
+    // Write structured lock content with a startTime that looks 40 seconds old
+    // (Bun.nanoseconds() - 40s in ns). We can't easily manipulate Bun.nanoseconds()
+    // so we set mtime-based staleness via utimes as the fallback path.
+    const staleLock = JSON.stringify({ pid: deadPid, startTime: 0 }); // startTime=0 → very old
+    await writeFile(lockPath, staleLock, { flag: "w", mode: 0o600 });
+
+    // Backdate mtime to trigger fallback stale path too
+    const { utimes } = await import("node:fs/promises");
+    const past = new Date(Date.now() - 31_000);
+    await utimes(lockPath, past, past);
+
+    // withLock must reclaim the stale lock and run the callback
+    const result = await withLock(async () => "after monotonic stale");
+    expect(result).toBe("after monotonic stale");
+  });
 });

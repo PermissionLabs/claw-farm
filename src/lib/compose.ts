@@ -2,6 +2,17 @@ import { join, dirname } from "node:path";
 import type { AgentRuntime, ProxyMode } from "../runtimes/interface.ts";
 import { fileExists } from "./fs-utils.ts";
 
+/** Docker binary path — override with DOCKER_BIN env var (e.g. for Podman or custom installs). */
+const DOCKER_BIN = process.env["DOCKER_BIN"] ?? "docker";
+let _loggedBin = false;
+function dockerBin(): string {
+  if (!_loggedBin) {
+    console.log(`[compose] Using docker binary: ${DOCKER_BIN}`);
+    _loggedBin = true;
+  }
+  return DOCKER_BIN;
+}
+
 /** Canonical claw-farm compose filename. Used for all single-instance and instance compose files. */
 export const COMPOSE_FILENAME = "docker-compose.openclaw.yml";
 
@@ -26,7 +37,7 @@ export async function runCompose(
   const composePath = options?.composePath ?? join(projectDir, COMPOSE_FILENAME);
   const cwd = options?.composePath ? dirname(composePath) : projectDir;
 
-  const args = ["docker", "compose", "-f", composePath];
+  const args = [dockerBin(), "compose", "-f", composePath];
 
   // Auto-load override file if it exists (user customizations survive upgrade)
   const overridePath = composePath.replace(".yml", ".override.yml");
@@ -79,7 +90,7 @@ export async function runCompose(
  * Used for shared proxy mode: each instance network gets the api-proxy attached.
  */
 async function dockerNetworkConnect(network: string, container: string): Promise<void> {
-  const proc = Bun.spawn(["docker", "network", "connect", network, container], {
+  const proc = Bun.spawn([dockerBin(), "network", "connect", network, container], {
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -95,7 +106,7 @@ async function dockerNetworkConnect(network: string, container: string): Promise
 
 /** Disconnect a container from a Docker network (best effort, ignore errors). */
 async function dockerNetworkDisconnect(network: string, container: string): Promise<void> {
-  const proc = Bun.spawn(["docker", "network", "disconnect", network, container], {
+  const proc = Bun.spawn([dockerBin(), "network", "disconnect", network, container], {
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -120,7 +131,7 @@ export async function getComposeStatus(
   const composePath = options?.composePath ?? join(projectDir, COMPOSE_FILENAME);
   const cwd = options?.composePath ? dirname(composePath) : projectDir;
 
-  const args = ["docker", "compose", "-f", composePath];
+  const args = [dockerBin(), "compose", "-f", composePath];
   if (options?.projectName) {
     args.push("-p", options.projectName);
   }

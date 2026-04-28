@@ -44,8 +44,8 @@ export async function snapshotWorkspace(
     { src: join(wsDir, "SOUL.md"), dest: "SOUL.md" },
   ]) {
     try {
-      const content = await Bun.file(src).text();
-      await Bun.write(join(snapPath, dest), content);
+      const buffer = await Bun.file(src).arrayBuffer();
+      await Bun.write(join(snapPath, dest), buffer);
     } catch {
       // File doesn't exist yet — skip
     }

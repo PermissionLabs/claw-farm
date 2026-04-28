@@ -32,7 +32,9 @@ export const builtinProcessor: MemoryProcessor = {
         console.log("  No snapshots found — nothing to rebuild");
         return;
       }
-      const latest = snapshots.sort().at(-1)!;
+      const sorted = snapshots.sort();
+      const latest = sorted[sorted.length - 1];
+      if (!latest) throw new Error("Unreachable: snapshots non-empty but at(-1) returned undefined");
       const memoryContent = await Bun.file(
         join(snapshotsDir, latest, "MEMORY.md"),
       ).text();

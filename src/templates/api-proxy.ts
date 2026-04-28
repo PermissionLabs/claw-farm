@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { defaultSecretPatterns } from "../sdk/secret-scanner.ts";
 import { emitPythonSecretPatterns } from "../sdk/patterns/python-emitter.ts";
+import { emitPythonPiiPatterns } from "./api-proxy-patterns.ts";
 
 export function apiProxyServerTemplate(): string {
   const secretPatternLines = emitPythonSecretPatterns(defaultSecretPatterns);
@@ -41,6 +42,7 @@ import json
 import logging
 import logging.handlers
 import os
+import posixpath
 import re
 import socket
 import stat
@@ -203,25 +205,7 @@ def _set_audit_log_perms() -> None:
 PII_MODE = os.environ.get("PII_MODE", "redact")
 
 # --- PII Patterns (outbound — redact user data before it reaches the LLM) ---
-PII_PATTERNS = [
-    # Korean
-    (r"\\d{6}-[1-4]\\d{6}", "KR_RRN"),                         # 주민등록번호
-    (r"01[016789]-\\d{3,4}-\\d{4}", "KR_PHONE"),                # 한국 휴대폰
-    (r"0[2-6][0-9]-\\d{3,4}-\\d{4}", "KR_LANDLINE"),            # 한국 유선전화
-
-    # Financial
-    (r"\\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\\b", "CREDIT_CARD"),
-    (r"\\b\\d{3,4}-\\d{4}-\\d{4}-\\d{4}\\b", "CARD_FORMATTED"),  # 카드번호 (포맷)
-
-    # US
-    (r"\\b\\d{3}-\\d{2}-\\d{4}\\b", "US_SSN"),
-    (r"\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b", "US_PHONE"),
-
-    # Universal
-    (r"\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b", "EMAIL"),
-]
-
-COMPILED_PII = [(re.compile(p), label) for p, label in PII_PATTERNS]
+${emitPythonPiiPatterns()}
 
 # --- Secret Patterns (response — strip secrets before they reach the agent) ---
 # Generated from src/sdk/secret-scanner.ts via python-emitter — single source of truth.
@@ -401,8 +385,9 @@ async def proxy(request: Request, path: str):
     body = await request.body()
 
     # --- Guard 0: Path validation (SSRF prevention) ---
+    # Reject non-canonical forms (.// a/./b a/../b) that survive simple prefix checks.
     ALLOWED_PATH_PREFIXES = ACTIVE_PROVIDER["path_prefixes"]
-    if not any(path.startswith(p) for p in ALLOWED_PATH_PREFIXES):
+    if posixpath.normpath(path) != path or not any(path.startswith(p) for p in ALLOWED_PATH_PREFIXES):
         audit_log({"event": "blocked", "reason": "invalid_path", "path": path})
         return Response(
             content=json.dumps({"error": "Path not allowed"}),

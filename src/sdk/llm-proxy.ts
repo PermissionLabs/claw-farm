@@ -1,6 +1,7 @@
 // LLM Proxy pipeline engine — Koa-style onion middleware model
 
 import { createHash } from "node:crypto";
+import { posix as posixPath } from "node:path";
 import { validateUpstreamUrl } from "./lib/url-safety.ts";
 import { piiRedactor } from "./pii-redactor.ts";
 import { secretScanner } from "./secret-scanner.ts";
@@ -57,8 +58,11 @@ export function createLlmProxy(options: LlmProxyOptions) {
     const path = request.path.replace(/^\/+/, "");
 
     // --- Built-in guard: path traversal + prefix validation ---
+    // Also reject non-canonical forms (.//  a/./b  a/../b) that survive includes("..").
+    const normalizedPath = posixPath.normalize(path);
     if (
       path.includes("..") ||
+      normalizedPath !== path ||
       !provider.pathPrefixes.some((p) => path.startsWith(p))
     ) {
       return {

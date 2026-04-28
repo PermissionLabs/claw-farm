@@ -3,6 +3,7 @@ import { readProjectConfig, resolveRuntimeConfig } from "../lib/config.ts";
 import { runCompose, sharedProxyConnect } from "../lib/compose.ts";
 import { snapshotWorkspace } from "../lib/raw-collector.ts";
 import { projectKindOf } from "../lib/project-kind.ts";
+import { isNotFoundError } from "../lib/errors.ts";
 import type { AgentRuntime, ProxyMode } from "../runtimes/interface.ts";
 import { join } from "node:path";
 
@@ -110,8 +111,9 @@ export async function upCommand(args: string[]): Promise<void> {
   // Single-instance mode
   try {
     await snapshotWorkspace(entry.path, runtimeType);
-  } catch {
-    // Not critical
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
+    // workspace dir not yet created — skip snapshot
   }
 
   console.log(`\n▶ Starting ${projectName}...`);

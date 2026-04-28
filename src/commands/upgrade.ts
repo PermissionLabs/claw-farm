@@ -1,10 +1,10 @@
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { isNotFoundError } from "../lib/errors.ts";
-import { resolveProjectName, findPositionalArg, type ProjectEntry } from "../lib/registry.ts";
+import { resolveProjectName, findPositionalArg, loadRegistry, saveRegistry, withLock, type ProjectEntry } from "../lib/registry.ts";
 import { projectKindOf } from "../lib/project-kind.ts";
 import { copyTemplateFiles } from "../lib/api.ts";
-import { readProjectConfig, resolveRuntimeConfig, envExampleTemplate } from "../lib/config.ts";
+import { readProjectConfig, resolveRuntimeConfig, envExampleTemplate, writeProjectConfig } from "../lib/config.ts";
 import { ensureRawDirs } from "../lib/raw-collector.ts";
 import { ensureTemplateDirs, ensureInstanceDirs, templateDir, instanceDir } from "../lib/instance.ts";
 import { mem0ComposeTemplate } from "../templates/docker-compose.mem0.yml.ts";
@@ -134,6 +134,41 @@ export async function upgradeCommand(args: string[]): Promise<void> {
   const config = await readProjectConfig(projectDir);
   const processor = config?.processor ?? entry.processor;
   const llm = config?.llm ?? "gemini";
+  const preferConfig = args.includes("--prefer-config");
+  const preferRegistry = args.includes("--prefer-registry");
+
+  // Runtime reconciliation: detect mismatch between .claw-farm.json and registry
+  if (config?.runtime && entry.runtime && config.runtime !== entry.runtime) {
+    if (!preferConfig && !preferRegistry) {
+      throw new Error(
+        `Runtime mismatch for "${projectName}":\n` +
+        `  .claw-farm.json says: ${config.runtime}\n` +
+        `  registry says:        ${entry.runtime}\n` +
+        `\n` +
+        `  To resolve, either:\n` +
+        `    claw-farm upgrade ${projectName} --prefer-config    (use ${config.runtime}, update registry)\n` +
+        `    claw-farm upgrade ${projectName} --prefer-registry  (use ${entry.runtime}, update config)\n` +
+        `  Or run: claw-farm migrate-runtime ${projectName} --to <runtime>`,
+      );
+    }
+    if (preferConfig) {
+      // Use config.runtime — persist it back to registry
+      entry.runtime = config.runtime;
+      await withLock(async () => {
+        const reg = await loadRegistry();
+        const regEntry = reg.projects[projectName];
+        if (regEntry) regEntry.runtime = config.runtime;
+        await saveRegistry(reg);
+      });
+      console.log(`   Resolved: using ${config.runtime} (--prefer-config, registry updated)`);
+    } else {
+      // preferRegistry: use entry.runtime — persist it to config
+      const updatedConfig = { ...config, runtime: entry.runtime };
+      await writeProjectConfig(projectDir, updatedConfig);
+      console.log(`   Resolved: using ${entry.runtime} (--prefer-registry, config updated)`);
+    }
+  }
+
   const { runtimeType, runtime, proxyMode: resolvedProxyMode } = resolveRuntimeConfig(config, entry);
   const rtDir = runtime.runtimeDirName;
 
