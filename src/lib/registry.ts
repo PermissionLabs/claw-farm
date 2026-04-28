@@ -77,43 +77,69 @@ let _inProcessLockChain: Promise<void> = Promise.resolve();
  * Uses O_EXCL to atomically create a lock file.
  * Retries with backoff for up to ~5 seconds.
  */
+interface LockContent {
+  pid: number;
+  startTime: number; // Bun.nanoseconds() at lock write time — monotonic
+}
+
 async function acquireLock(): Promise<void> {
   await mkdir(REGISTRY_DIR, { recursive: true, mode: 0o700 });
 
   const maxAttempts = 50;
   const baseDelay = 100; // ms
+  const lockContent: LockContent = { pid: process.pid, startTime: Bun.nanoseconds() };
 
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      await writeFile(LOCK_PATH, String(process.pid), { flag: "wx", mode: 0o600 });
+      await writeFile(LOCK_PATH, JSON.stringify(lockContent), { flag: "wx", mode: 0o600 });
       return; // Lock acquired
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
 
-      // Check if lock is stale by reading the PID and verifying the process is alive
+      // Check if lock is stale — prefer monotonic nanosecond comparison; fall back to mtime.
       try {
         const lockStat = await stat(LOCK_PATH);
         const ageMs = Date.now() - lockStat.mtimeMs;
-        if (ageMs > 30_000) {
-          // Also verify the owning process is truly gone before unlinking
+
+        // Parse structured lock content for monotonic stale check
+        let lockPid: number | undefined;
+        let isStaleByTime = false;
+        try {
+          const raw = await readFile(LOCK_PATH, "utf8");
+          const parsed = JSON.parse(raw) as Partial<LockContent>;
+          lockPid = typeof parsed.pid === "number" ? parsed.pid : undefined;
+          if (typeof parsed.startTime === "number") {
+            // Monotonic: if lock startTime is more than 30s (in ns) behind current nanoseconds
+            const elapsedNs = Bun.nanoseconds() - parsed.startTime;
+            isStaleByTime = elapsedNs > 30_000_000_000;
+          } else {
+            // Fallback: mtime-based stale detection
+            isStaleByTime = ageMs > 30_000;
+          }
+        } catch {
+          // Unparseable lock content — fall back to mtime
+          isStaleByTime = ageMs > 30_000;
           try {
-            const pidStr = await readFile(LOCK_PATH, "utf8");
-            const pid = parseInt(pidStr.trim(), 10);
-            if (!isNaN(pid)) {
-              try {
-                process.kill(pid, 0); // throws if process doesn't exist
-                // Process is still alive — not safe to steal the lock, keep waiting
-              } catch {
-                // Process is dead — safe to remove stale lock
-                await unlink(LOCK_PATH);
-                continue;
-              }
-            } else {
+            const raw = await readFile(LOCK_PATH, "utf8");
+            lockPid = parseInt(raw.trim(), 10);
+            if (isNaN(lockPid)) lockPid = undefined;
+          } catch { /* ignore */ }
+        }
+
+        if (isStaleByTime) {
+          // Verify the owning process is truly gone before unlinking
+          if (lockPid !== undefined) {
+            try {
+              process.kill(lockPid, 0); // throws if process doesn't exist
+              // Process is still alive — not safe to steal the lock, keep waiting
+            } catch {
+              // Process is dead — safe to remove stale lock
               await unlink(LOCK_PATH);
               continue;
             }
-          } catch {
-            // Could not read PID or file vanished — retry
+          } else {
+            await unlink(LOCK_PATH);
+            continue;
           }
         }
       } catch {
@@ -173,11 +199,18 @@ export async function loadRegistry(): Promise<Registry> {
       return defaultRegistry();
     }
     if (err instanceof SyntaxError) {
-      console.warn("⚠ Registry file is corrupted JSON, creating backup and using defaults");
-      try {
-        await copyFile(REGISTRY_PATH, REGISTRY_PATH + ".corrupted." + Date.now());
-      } catch { /* best effort */ }
-      return defaultRegistry();
+      if (process.env["CLAW_FARM_REPAIR"] === "1") {
+        console.warn("⚠ Registry file is corrupted JSON — CLAW_FARM_REPAIR=1 active, creating backup and using defaults");
+        try {
+          await copyFile(REGISTRY_PATH, REGISTRY_PATH + ".corrupted." + Date.now());
+        } catch { /* best effort */ }
+        return defaultRegistry();
+      }
+      throw new Error(
+        `Registry file at ${REGISTRY_PATH} is corrupted (invalid JSON).\n` +
+        `  Run with CLAW_FARM_REPAIR=1 to back it up and continue with defaults, which may lose port allocations.\n` +
+        `  Or restore from a backup: ${REGISTRY_PATH}.corrupted.*`,
+      );
     }
     return defaultRegistry();
   }
