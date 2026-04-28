@@ -4,6 +4,7 @@ import { readProjectConfig, resolveRuntimeConfig } from "../lib/config.ts";
 import { runCompose, sharedProxyConnect } from "../lib/compose.ts";
 import { snapshotWorkspace } from "../lib/raw-collector.ts";
 import { projectKindOf } from "../lib/project-kind.ts";
+import { isNotFoundError } from "../lib/errors.ts";
 import type { AgentRuntime, ProxyMode } from "../runtimes/interface.ts";
 
 /** Stop shared proxy compose if no instances remain running. */
@@ -66,8 +67,9 @@ export async function downCommand(args: string[]): Promise<void> {
         console.log(`\n■ Stopping ${name}...`);
         try {
           await snapshotWorkspace(project.path, runtimeType);
-        } catch {
-          // intentional: best-effort snapshot before stop
+        } catch (err) {
+          if (!isNotFoundError(err)) throw err;
+          // workspace dir not yet created — skip snapshot
         }
         await runCompose(project.path, "down");
       }
@@ -123,8 +125,9 @@ export async function downCommand(args: string[]): Promise<void> {
   try {
     await snapshotWorkspace(entry.path, runtimeType);
     console.log("✓ Workspace snapshot saved");
-  } catch {
-    // intentional: best-effort snapshot before stop
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
+    // workspace dir not yet created — skip snapshot
   }
 
   console.log(`\n■ Stopping ${projectName}...`);
