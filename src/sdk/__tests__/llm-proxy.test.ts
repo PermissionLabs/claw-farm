@@ -111,6 +111,68 @@ describe("createLlmProxy", () => {
     expect(fetchCalls).toHaveLength(0);
   });
 
+  // BKLG-042: non-canonical path forms that survive includes("..")
+  it("returns 403 for double-slash interior path /v1/.//chat (BKLG-042)", async () => {
+    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [], ssrfOptions: testSsrfOptions });
+
+    const response = await proxy({
+      method: "GET",
+      path: "/v1/.//chat",
+      queryString: "",
+      headers: {},
+      body: Buffer.from(""),
+    });
+
+    expect(response.status).toBe(403);
+    expect(fetchCalls).toHaveLength(0);
+  });
+
+  it("returns 403 for dot-segment path /v1/./chat (BKLG-042)", async () => {
+    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [], ssrfOptions: testSsrfOptions });
+
+    const response = await proxy({
+      method: "GET",
+      path: "/v1/./chat",
+      queryString: "",
+      headers: {},
+      body: Buffer.from(""),
+    });
+
+    expect(response.status).toBe(403);
+    expect(fetchCalls).toHaveLength(0);
+  });
+
+  it("returns 403 for double-slash interior path /v1//chat (BKLG-042)", async () => {
+    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [], ssrfOptions: testSsrfOptions });
+
+    const response = await proxy({
+      method: "GET",
+      path: "/v1//chat",
+      queryString: "",
+      headers: {},
+      body: Buffer.from(""),
+    });
+
+    expect(response.status).toBe(403);
+    expect(fetchCalls).toHaveLength(0);
+  });
+
+  it("allows canonical path /v1/ with trailing slash (BKLG-042)", async () => {
+    const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [], ssrfOptions: testSsrfOptions });
+
+    // posix.normalize("v1/") === "v1/" so this must pass the guard
+    const response = await proxy({
+      method: "GET",
+      path: "/v1/models",
+      queryString: "",
+      headers: {},
+      body: Buffer.from(""),
+    });
+
+    // Should reach upstream (200 from mock), not be rejected
+    expect(response.status).toBe(200);
+  });
+
   it("returns 413 when body exceeds maxSizeMb", async () => {
     const { proxy } = createLlmProxy({ provider: fakeProvider, pipeline: [], maxSizeMb: 0.0001, ssrfOptions: testSsrfOptions });
 
